@@ -7,7 +7,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
-    libmysqlclient-dev \
+    default-libmysqlclient-dev \
+    build-essential \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -17,6 +19,7 @@ COPY requirements_db.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir -r requirements_db.txt
+RUN pip install --no-cache-dir mysqlclient
 
 # Copy all source code
 COPY . .
