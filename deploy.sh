@@ -37,7 +37,9 @@ log_error() {
 # Check if running as root
 check_root() {
     if [[ $EUID -eq 0 ]]; then
-        log_warn "Running as root - ini OK untuk Docker fix"
+        log_error "Jangan run sebagai root!"
+        log_info "Run sebagai user biasa dengan sudo privilege"
+        exit 1
     fi
 }
 
@@ -122,15 +124,8 @@ EOF
 build_image() {
     log_info "Building Docker image..."
 
-    # Use sudo if needed
-    DOCKER_CMD="docker"
-    if ! docker ps &>/dev/null; then
-        log_info "Docker permission issue, using sudo..."
-        DOCKER_CMD="sudo docker"
-    fi
-
     # Build image
-    if $DOCKER_CMD build -t ${IMAGE_NAME} .; then
+    if docker build -t ${IMAGE_NAME} .; then
         log_info "Docker image built successfully!"
     else
         log_error "Failed to build Docker image"
@@ -141,12 +136,6 @@ build_image() {
 # Deploy services
 deploy_services() {
     log_info "Deploying services..."
-
-    # Use sudo if needed
-    DOCKER_CMD="docker"
-    if ! docker ps &>/dev/null; then
-        DOCKER_CMD="sudo docker"
-    fi
 
     # Create symlink to server directory
     if [ ! -L ./output_train ]; then
@@ -169,19 +158,19 @@ deploy_services() {
     case $choice in
         1)
             log_info "Deploying Daily Pipeline..."
-            $DOCKER_CMD-compose --profile pipeline up -d
+            docker-compose --profile pipeline up -d
             ;;
         2)
             log_info "Deploying API Server..."
-            $DOCKER_CMD-compose --profile api up -d
+            docker-compose --profile api up -d
             ;;
         3)
             log_info "Deploying Daily Pipeline + API Server..."
-            $DOCKER_CMD-compose --profile pipeline --profile api up -d
+            docker-compose --profile pipeline --profile api up -d
             ;;
         4)
             log_info "Deploying All Services..."
-            $DOCKER_CMD-compose --profile pipeline --profile api --profile scheduler up -d
+            docker-compose --profile pipeline --profile api --profile scheduler up -d
             ;;
         *)
             log_error "Invalid choice"

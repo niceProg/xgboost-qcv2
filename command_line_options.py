@@ -166,11 +166,7 @@ class DataFilter:
         )
 
         # Localize to timezone
-        if self.timezone == 'WIB':
-            local_tz = pytz.timezone('Asia/Jakarta')  # WIB = Asia/Jakarta
-            start_dt = local_tz.localize(start_dt)
-            end_dt = local_tz.localize(end_dt)
-        elif self.timezone != 'UTC' and self.timezone:
+        if self.timezone != 'UTC':
             local_tz = pytz.timezone(self.timezone)
             start_dt = local_tz.localize(start_dt)
             end_dt = local_tz.localize(end_dt)

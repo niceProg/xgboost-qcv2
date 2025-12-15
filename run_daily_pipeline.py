@@ -31,7 +31,7 @@ class DailyPipelineRunner:
         self.exchange = os.getenv('EXCHANGE', 'binance')
         self.pair = os.getenv('PAIR', 'BTCUSDT')
         self.interval = os.getenv('INTERVAL', '1h')
-        self.trading_hours = os.getenv('TRADING_HOURS', '00:00-09:00')  # 7:00-16:00 WIB in UTC
+        self.trading_hours = os.getenv('TRADING_HOURS', '7:00-16:00')
         self.timezone = os.getenv('TIMEZONE', 'UTC')
         self.output_dir = os.getenv('OUTPUT_DIR', './output_train')
 
@@ -88,12 +88,7 @@ class DailyPipelineRunner:
         import pytz
 
         # Get timezone
-        if self.timezone == 'WIB':
-            tz = pytz.timezone('Asia/Jakarta')  # WIB = Asia/Jakarta
-        elif self.timezone == 'UTC':
-            tz = datetime.timezone.utc
-        else:
-            tz = None
+        tz = pytz.timezone(self.timezone) if self.timezone != 'UTC' else None
 
         # Get current time
         now = datetime.now(tz) if tz else datetime.now()

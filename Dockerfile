@@ -7,10 +7,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
-    default-libmysqlclient-dev \
-    build-essential \
-    pkg-config \
-    curl \
+    libmysqlclient-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -18,15 +15,14 @@ COPY requirements.txt .
 COPY requirements_db.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements_db.txt && \
-    pip install --no-cache-dir mysqlclient
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements_db.txt
 
 # Copy all source code
 COPY . .
 
-# Create output directory (as root)
-RUN mkdir -p /app/output_train /app/logs
+# Create output directory
+RUN mkdir -p /app/output_train
 
 # Expose API port
 EXPOSE 8000

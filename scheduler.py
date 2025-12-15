@@ -33,7 +33,7 @@ class PipelineScheduler:
         self.exchange = os.getenv('EXCHANGE', 'binance')
         self.pair = os.getenv('PAIR', 'BTCUSDT')
         self.interval = os.getenv('INTERVAL', '1h')
-        self.trading_hours = os.getenv('TRADING_HOURS', '00:00-09:00')  # 7:00-16:00 WIB in UTC
+        self.trading_hours = os.getenv('TRADING_HOURS', '7:00-16:00')
         self.timezone = os.getenv('TIMEZONE', 'UTC')
 
         # Parse trading hours
@@ -44,12 +44,7 @@ class PipelineScheduler:
         self.end_min = int(end_str.split(':')[1])
 
         # Get timezone object
-        if self.timezone == 'WIB':
-            self.tz = pytz.timezone('Asia/Jakarta')  # WIB = Asia/Jakarta
-        elif self.timezone == 'UTC':
-            self.tz = datetime.timezone.utc
-        else:
-            self.tz = None
+        self.tz = pytz.timezone(self.timezone) if self.timezone != 'UTC' else None
 
         logger.info(f"Scheduler initialized for {self.exchange}/{self.pair}/{self.interval}")
         logger.info(f"Trading hours: {self.trading_hours} ({self.timezone})")

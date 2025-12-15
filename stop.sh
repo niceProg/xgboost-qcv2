@@ -32,19 +32,13 @@ log_error() {
 stop_all() {
     log_info "Stopping all XGBoost services..."
 
-    # Use sudo if needed
-    DOCKER_CMD="docker"
-    if ! docker ps &>/dev/null; then
-        DOCKER_CMD="sudo docker"
-    fi
-
     # Stop all docker-compose services
     if [ -f docker-compose.yml ]; then
-        $DOCKER_CMD-compose --profile pipeline --profile api --profile scheduler down 2>/dev/null || true
+        docker-compose --profile pipeline --profile api --profile scheduler down 2>/dev/null || true
 
         # Force remove any running containers
-        $DOCKER_CMD stop $($DOCKER_CMD ps -q --filter "name=xgboost") 2>/dev/null || true
-        $DOCKER_CMD rm $($DOCKER_CMD ps -aq --filter "name=xgboost") 2>/dev/null || true
+        docker stop $(docker ps -q --filter "name=xgboost") 2>/dev/null || true
+        docker rm $(docker ps -aq --filter "name=xgboost") 2>/dev/null || true
 
         log_info "All services stopped!"
     else
@@ -58,8 +52,8 @@ cleanup() {
 
     if [[ $remove_images =~ ^[Yy]$ ]]; then
         log_info "Removing Docker images..."
-        $DOCKER_CMD rmi xgboost-qc:latest 2>/dev/null || true
-        $DOCKER_CMD image prune -f
+        docker rmi xgboost-qc:latest 2>/dev/null || true
+        docker image prune -f
         log_info "Images removed!"
     fi
 
@@ -84,14 +78,8 @@ cleanup() {
 show_status() {
     log_info "Checking status..."
 
-    # Use sudo if needed
-    DOCKER_CMD="docker"
-    if ! docker ps &>/dev/null; then
-        DOCKER_CMD="sudo docker"
-    fi
-
     # Check containers
-    running_containers=$($DOCKER_CMD ps --filter "name=xgboost" --format "table {{.Names}}")
+    running_containers=$(docker ps --filter "name=xgboost" --format "table {{.Names}}")
     if [ -n "$running_containers" ]; then
         log_warn "Still running containers:"
         echo "$running_containers"

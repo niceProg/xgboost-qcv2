@@ -53,9 +53,8 @@ ENABLE_DB_STORAGE=true
 EXCHANGE=binance
 PAIR=BTCUSDT
 INTERVAL=1h
-# Trading hours in UTC (7:00-16:00 WIB = 00:00-09:00 UTC)
-TRADING_HOURS=00:00-09:00
-TIMEZONE=WIB  # Waktu Indonesia Barat (UTC+7)
+TRADING_HOURS=7:00-16:00
+TIMEZONE=WIB
 OUTPUT_DIR=./output_train
 
 # Model Evaluation
@@ -92,169 +91,22 @@ python model_evaluation_with_leverage.py --exchange binance --pair BTCUSDT --int
 
 ```bash
 # Option 1: Manual daily run
-python run_daily_pipeline.py --mode daily --trading-hours 00:00-09:00 --timezone WIB
+python run_daily_pipeline.py --mode daily --trading-hours 7:00-16:00 --timezone WIB
 
 # Option 2: Use scheduler (auto-run at 7 AM WIB)
 python scheduler.py
 
 # Option 3: Use helper script
 ./simple_run.sh
-
-# Option 4: Use Docker for daily pipeline (secure)
-docker run --rm \
-  --env-file ./.env \
-  -v /opt/xgboost-qc/output_train:/app/output_train \
-  xgboost-qc python run_daily_pipeline.py --mode daily
-
-# Option 5: Use Docker Compose (recommended)
-docker-compose --profile pipeline up -d
 ```
 
 ### 4. Start API Server
 
 ```bash
-# Option 1: Start API server directly
+# Start API server
 python api_server.py
 
-# Option 2: Start API server with Docker (secure)
-docker run -d \
-  --name xgboost-api \
-  --env-file ./.env \
-  -p 8000:8000 \
-  -v /opt/xgboost-qc/output_train:/app/output_train:ro \
-  xgboost-qc python api_server.py
-
-# Option 3: Use Docker Compose for API (recommended)
-docker-compose --profile api up -d
-
-# Option 4: Start scheduler with Docker
-docker-compose --profile scheduler up -d
-```
-
-## Docker Deployment
-
-### Prerequisites
-- Docker installed
-- Docker Compose installed
-- At least 2GB RAM available
-- Port 8000 available
-- Database server accessible from Docker host
-
-### Docker Image Build
-
-```bash
-# Build the Docker image
-docker build -t xgboost-qc .
-
-# Or pull from registry (if available)
-docker pull your-registry/xgboost-qc:latest
-```
-
-### Docker Compose for API Server
-
-Create `docker-compose-api.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  api_server:
-    image: xgboost-qc:latest
-    container_name: xgboost_api
-    command: ["python", "api_server.py"]
-    ports:
-      - "8000:8000"
-    environment:
-      # Database Configuration
-      DB_HOST: 103.150.81.86
-      DB_PORT: 3306
-      DB_USER: xgboostqc
-      DB_PASSWORD: 6SPxBDwXH6WyxpfT
-      DB_NAME: xgboostqc
-
-      # API Configuration
-      API_PORT: 8000
-      ENV: production
-      OUTPUT_DIR: /app/output_train
-    volumes:
-      - ./output_train:/app/output_train:ro  # Read-only for API
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-```
-
-### Running with Docker
-
-```bash
-# Build and run API server
-docker-compose -f docker-compose-api.yml up -d
-
-# View logs
-docker-compose -f docker-compose-api.yml logs -f
-
-# Stop API server
-docker-compose -f docker-compose-api.yml down
-
-# Scale API server (load balancing)
-docker-compose -f docker-compose-api.yml up -d --scale api_server=3
-```
-
-### Docker Environment Variables
-
-Using `.env` file (recommended and more secure):
-
-```bash
-# All environment variables are loaded from .env file
-# No need to pass them manually
-
-# Build and run with environment file
-docker-compose --profile api up -d
-
-# Or with docker run (using env file)
-docker run --rm \
-  --env-file ./.env \
-  -v /opt/xgboost-qc/output_train:/app/output_train \
-  xgboost-qc python run_daily_pipeline.py
-```
-
-Alternative: Direct environment variables (less secure):
-```bash
-# Only use for testing or CI/CD environments
-docker run --rm \
-  -e DB_HOST=103.150.81.86 \
-  -e DB_USER=xgboostqc \
-  -e DB_PASSWORD=6SPxBDwXH6WyxpfT \
-  -e DB_NAME=xgboostqc \
-  -v /opt/xgboost-qc/output_train:/app/output_train \
-  xgboost-qc python api_server.py
-```
-
-### Server Directory Structure
-
-```
-/opt/xgboost-qc/
-├── .env                    # Environment configuration (keep secure!)
-├── output_train/           # Training outputs (server volume)
-├── logs/                  # Application logs (server volume)
-├── docker-compose.yml       # Docker Compose configuration
-├── Dockerfile              # Docker image definition
-└── src/                   # Source code
-```
-
-### Secure Volume Mounting
-
-All important directories use server volumes, not Docker volumes:
-
-```yaml
-# In docker-compose.yml
-volumes:
-  - /opt/xgboost-qc/output_train:/app/output_train:ro  # Persistent data
-  - /opt/xgboost-qc/.env:/app/.env:ro                # Config (read-only)
-  - /opt/xgboost-qc/logs:/app/logs                      # Logs
+# API will be available at: http://localhost:8000/api/v1/
 ```
 
 ## Manual Execution
@@ -366,10 +218,9 @@ curl http://localhost:8000/api/v1/health
 ## Scheduler Configuration
 
 ### Trading Hours
-- Default: 7:00 AM to 4:00 PM WIB (UTC+7)
-- In UTC this is: 12:00 AM to 9:00 AM (00:00-09:00 UTC)
-- Configurable via `TRADING_HOURS` environment variable (always in UTC)
-- Format: "HH:MM-HH:MM" (24-hour format in UTC)
+- Default: 7:00 AM to 4:00 PM (WIB)
+- Configurable via `TRADING_HOURS` environment variable
+- Format: "HH:MM-HH:MM"
 
 ### Scheduler Modes
 
@@ -597,93 +448,7 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
 
 ## Production Deployment
 
-### Option 1: Docker Deployment (Recommended)
-
-```bash
-# Build Docker image
-docker build -t xgboost-qc .
-
-# Save to registry (optional)
-docker tag xgboost-qc:latest your-registry/xgboost-qc:latest
-docker push your-registry/xgboost-qc:latest
-```
-
-#### Production Docker Compose
-
-Create `docker-compose-prod.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  api_server:
-    image: xgboost-qc:latest
-    container_name: xgboost_api_prod
-    command: ["python", "api_server.py"]
-    ports:
-      - "8000:8000"
-    environment:
-      # Database Configuration
-      DB_HOST: 103.150.81.86
-      DB_PORT: 3306
-      DB_USER: xgboostqc
-      DB_PASSWORD: 6SPxBDwXH6WyxpfT
-      DB_NAME: xgboostqc
-
-      # API Configuration
-      API_PORT: 8000
-      ENV: production
-      OUTPUT_DIR: /app/output_train
-
-      # Logging
-      PYTHONUNBUFFERED: 1
-    volumes:
-      - ./output_train:/app/output_train:ro
-      - ./logs:/app/logs
-    restart: unless-stopped
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '1'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 1G
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    networks:
-      - xgboost_network
-```
-
-#### Deploy to Production Server
-
-```bash
-# On production server
-git clone <repository>
-cd xgboost-qc
-
-# Copy .env file (do not commit to git)
-scp .env.production .env
-
-# Build and run
-docker-compose -f docker-compose-prod.yml up -d
-
-# Scale if needed
-docker-compose -f docker-compose-prod.yml up -d --scale api_server=3
-
-# Update without downtime
-docker-compose -f docker-compose-prod.yml pull
-docker-compose -f docker-compose-prod.yml up -d --no-deps api_server
-```
-
-### Option 2: Manual Deployment
-
-#### Using Supervisor
+### Using Supervisor
 
 ```bash
 # Install supervisor
@@ -701,7 +466,6 @@ autostart=true
 autorestart=true
 redirect_stderr=true
 stdout_logfile=/var/log/xgboost-api.log
-environment=PATH="/opt/xgboost-qc/venv/bin",DB_HOST="103.150.81.86"
 
 [program:xgboost-scheduler]
 command=/opt/xgboost-qc/venv/bin/python scheduler.py
@@ -711,18 +475,9 @@ autostart=true
 autorestart=true
 redirect_stderr=true
 stdout_logfile=/var/log/xgboost-scheduler.log
-environment=PATH="/opt/xgboost-qc/venv/bin",TIMEZONE="WIB"
-
-# Reload supervisor
-sudo supervisorctl reread
-sudo supervisorctl update
-
-# Start services
-sudo supervisorctl start xgboost-api
-sudo supervisorctl start xgboost-scheduler
 ```
 
-#### Using Nginx Reverse Proxy
+### Using Nginx Reverse Proxy
 
 ```nginx
 # /etc/nginx/sites-available/xgboost-api
@@ -730,55 +485,11 @@ server {
     listen 80;
     server_name your-domain.com;
 
-    # Redirect HTTP to HTTPS
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-
-    # SSL Configuration
-    ssl_certificate /etc/ssl/certs/your-domain.crt;
-    ssl_certificate_key /etc/ssl/private/your-domain.key;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    # Security Headers
-    add_header X-Frame-Options DENY;
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-
-    # API Routes
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    # File Downloads (limit size)
-    location /api/v1/download/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_max_body_size 100M;
-        proxy_set_header Host $host;
-    }
-
-    # Health Check
-    location /api/v1/health {
-        proxy_pass http://127.0.0.1:8000;
-        access_log off;
-    }
-
-    # Default
-    location / {
-        return 404;
     }
 }
 ```
