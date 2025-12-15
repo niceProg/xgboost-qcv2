@@ -1,0 +1,18 @@
+# Additional requirements for database storage and API
+sqlalchemy>=1.4.0
+pymysql>=1.0.0
+fastapi>=0.68.0
+uvicorn>=0.15.0
+pydantic>=1.8.0
+python-multipart>=0.0.5
+aiofiles>=0.7.0
+
+# For timezone handling
+pytz>=2021.3
+
+# For API documentation (optional)
+fastapi-offline>=0.3.3
+
+# For QuantConnect integration (optional)
+websocket-client>=1.0.0
+requests>=2.25.0
