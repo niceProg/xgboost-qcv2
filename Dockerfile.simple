@@ -25,11 +25,8 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy all source code
 COPY . .
 
-# Create non-root user and set permissions
-RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/output_train /app/logs && \
-    chown -R appuser:appuser /app
-USER appuser
+# Create output directory
+RUN mkdir -p /app/output_train /app/logs
 
 # Expose API port
 EXPOSE 8000
