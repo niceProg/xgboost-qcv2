@@ -132,18 +132,23 @@ def get_output_files() -> Dict[str, List[Dict]]:
 
 def load_latest_model() -> tuple:
     """Load the latest trained model."""
-    model_files = list(OUTPUT_DIR.glob('*.joblib'))
-    if not model_files:
-        raise HTTPException(
-            status_code=404,
-            detail="No trained model found"
-        )
+    # Cek file latest_model.joblib
+    latest_model_path = OUTPUT_DIR / 'latest_model.joblib'
 
-    # Get the most recent model
-    latest_model = max(model_files, key=lambda x: x.stat().st_mtime)
+    if not latest_model_path.exists():
+        # Jika tidak ada, cari model terbaru
+        model_files = list(OUTPUT_DIR.glob('xgboost_trading_model_*.joblib'))
+        if not model_files:
+            raise HTTPException(
+                status_code=404,
+                detail="No trained model found"
+            )
+
+        # Get the most recent model
+        latest_model_path = max(model_files, key=lambda x: x.stat().st_mtime)
 
     try:
-        model = joblib.load(latest_model)
+        model = joblib.load(latest_model_path)
 
         # Load feature list if available
         feature_file = OUTPUT_DIR / 'model_features.txt'
@@ -153,7 +158,7 @@ def load_latest_model() -> tuple:
         else:
             features = []
 
-        return model, features, latest_model
+        return model, features, latest_model_path
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -226,8 +231,14 @@ async def get_latest_model():
     try:
         model, features, model_path = load_latest_model()
 
-        # Extract session info from filename
-        session_id = model_path.stem.replace('xgboost_trading_model_', '')
+        # Untuk latest, nama file selalu "latest_model.joblib"
+        model_name = "latest_model.joblib"
+
+        # Extract session info if the actual file has timestamp
+        if "xgboost_trading_model_" in model_path.name:
+            session_id = model_path.stem.replace('xgboost_trading_model_', '')
+        else:
+            session_id = "latest"
 
         # Try to load performance metrics
         try:
@@ -236,10 +247,10 @@ async def get_latest_model():
             metrics = None
 
         return ModelInfo(
-            model_name=model_path.name,
+            model_name=model_name,  # Selalu "latest_model.joblib"
             session_id=session_id,
             created_at=datetime.fromtimestamp(model_path.stat().st_mtime),
-            file_path=str(model_path),
+            file_path=str(model_path),  # Path ke file aktual
             feature_count=len(features),
             metrics=metrics
         )
@@ -252,7 +263,8 @@ async def get_model_history():
     """Get semua model yang tersedia."""
     model_files = []
 
-    for file_path in OUTPUT_DIR.glob('*.joblib'):
+    # Only include timestamped models in history, not "latest_model.joblib"
+    for file_path in OUTPUT_DIR.glob('xgboost_trading_model_*.joblib'):
         stat = file_path.stat()
         session_id = file_path.stem.replace('xgboost_trading_model_', '')
 
@@ -263,7 +275,7 @@ async def get_model_history():
             metrics = None
 
         model_files.append(ModelInfo(
-            model_name=file_path.name,
+            model_name=file_path.name,  # e.g., "xgboost_trading_model_20241215_143000.joblib"
             session_id=session_id,
             created_at=datetime.fromtimestamp(stat.st_mtime),
             file_path=str(file_path),
@@ -301,12 +313,12 @@ async def predict(request: PredictionRequest):
         prediction = int(probability > request.threshold)
 
         # Model info
-        session_id = model_path.stem.replace('xgboost_trading_model_', '')
+        # Untuk response, gunakan nama "latest_model.joblib" untuk konsistensi
         model_info = ModelInfo(
-            model_name=model_path.name,
-            session_id=session_id,
+            model_name="latest_model.joblib",
+            session_id="latest",
             created_at=datetime.fromtimestamp(model_path.stat().st_mtime),
-            file_path=str(model_path),
+            file_path=str(model_path),  # Path ke file aktual
             feature_count=len(feature_names)
         )
 
@@ -449,11 +461,17 @@ async def view_file_content(filename: str, limit: int = 100):
 @app.get("/api/v1/health")
 async def health_check():
     """Health check endpoint."""
+    # Count latest model and timestamped models separately
+    latest_model = OUTPUT_DIR / 'latest_model.joblib'
+    timestamped_models = list(OUTPUT_DIR.glob('xgboost_trading_model_*.joblib'))
+
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow(),
         "output_dir_exists": OUTPUT_DIR.exists(),
-        "model_count": len(list(OUTPUT_DIR.glob('*.joblib')))
+        "has_latest_model": latest_model.exists(),
+        "timestamped_model_count": len(timestamped_models),
+        "total_models": (1 if latest_model.exists() else 0) + len(timestamped_models)
     }
 
 if __name__ == "__main__":
