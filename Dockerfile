@@ -25,18 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy all source code
 COPY . .
 
-# Create non-root user and set permissions
-RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/output_train /app/logs && \
-    chown -R appuser:appuser /app
-USER appuser
+# Create output directory (as root)
+RUN mkdir -p /app/output_train /app/logs
 
 # Expose API port
 EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
 # Default command (can be overridden)
 CMD ["python", "run_daily_pipeline.py"]
