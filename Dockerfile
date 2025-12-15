@@ -13,7 +13,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
-    libmysqlclient-dev \
+    libmariadb-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
