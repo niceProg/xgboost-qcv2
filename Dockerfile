@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     default-libmysqlclient-dev \
     build-essential \
     pkg-config \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -17,18 +18,26 @@ COPY requirements.txt .
 COPY requirements_db.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir -r requirements_db.txt
-RUN pip install --no-cache-dir mysqlclient
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements_db.txt && \
+    pip install --no-cache-dir mysqlclient
 
 # Copy all source code
 COPY . .
 
 # Create output directory
-RUN mkdir -p /app/output_train
+RUN mkdir -p /app/output_train /app/logs
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
 # Expose API port
 EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
 # Default command (can be overridden)
 CMD ["python", "run_daily_pipeline.py"]
