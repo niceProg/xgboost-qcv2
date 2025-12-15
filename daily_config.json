@@ -1,0 +1,17 @@
+{
+  "exchange": "binance",
+  "pairs": ["BTCUSDT", "ETHUSDT"],
+  "intervals": ["1h", "4h"],
+  "timezone": "WIB",
+  "trading_hours": "7:00-16:00",
+  "output_dir": "./output_train",
+  "mode": "daily",
+  "notification": {
+    "enabled": false,
+    "webhook_url": null
+  },
+  "cleanup": {
+    "enabled": true,
+    "keep_days": 30
+  }
+}

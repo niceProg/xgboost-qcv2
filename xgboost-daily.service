@@ -1,0 +1,31 @@
+[Unit]
+Description=XGBoost Daily Trading Pipeline
+After=network.target mysql.service
+Wants=network.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/xgboost-qc
+Environment=PYTHONPATH=/home/ubuntu/xgboost-qc
+ExecStart=/usr/bin/python3 /home/ubuntu/xgboost-qc/daily_runner.py
+ExecStartPost=/usr/bin/python3 /home/ubuntu/xgboost-qc/notify_results.py
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xgboost-daily
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/home/ubuntu/xgboost-qc/output_train /home/ubuntu/xgboost-qc/logs
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=4G
+CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target

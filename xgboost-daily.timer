@@ -1,0 +1,13 @@
+[Unit]
+Description=Run XGBoost Daily Trading Pipeline every weekday
+Requires=xgboost-daily.service
+
+[Timer]
+# Run every weekday at 16:30 WIB (09:30 UTC)
+OnCalendar=*-*-* 09:30:00 UTC
+# Run 1 hour after trading hours close to ensure all data is available
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target
