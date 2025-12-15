@@ -88,7 +88,12 @@ class DailyPipelineRunner:
         import pytz
 
         # Get timezone
-        tz = pytz.timezone(self.timezone) if self.timezone != 'UTC' else None
+        if self.timezone == 'WIB':
+            tz = pytz.timezone('Asia/Jakarta')  # WIB = Asia/Jakarta
+        elif self.timezone == 'UTC':
+            tz = datetime.timezone.utc
+        else:
+            tz = None
 
         # Get current time
         now = datetime.now(tz) if tz else datetime.now()

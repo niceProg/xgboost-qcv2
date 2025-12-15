@@ -44,7 +44,12 @@ class PipelineScheduler:
         self.end_min = int(end_str.split(':')[1])
 
         # Get timezone object
-        self.tz = pytz.timezone(self.timezone) if self.timezone != 'UTC' else None
+        if self.timezone == 'WIB':
+            self.tz = pytz.timezone('Asia/Jakarta')  # WIB = Asia/Jakarta
+        elif self.timezone == 'UTC':
+            self.tz = datetime.timezone.utc
+        else:
+            self.tz = None
 
         logger.info(f"Scheduler initialized for {self.exchange}/{self.pair}/{self.interval}")
         logger.info(f"Trading hours: {self.trading_hours} ({self.timezone})")
