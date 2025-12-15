@@ -1,1 +1,3 @@
 .xgboost-qc
+output_train/
+.env
