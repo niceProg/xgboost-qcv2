@@ -31,9 +31,12 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p output_train logs
 
-# Change ownership (for non-root execution)
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
+# Run as root (for production server environment)
+# Comment these lines if you want to run as non-root
+# RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# USER appuser
+
+# Running as root - comment out the USER line above if you prefer non-root
 
 # Expose port
 EXPOSE 8000

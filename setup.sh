@@ -28,18 +28,23 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if running as root
+# Get current user and set appropriate settings
 if [ "$EUID" -eq 0 ]; then
-    print_error "Please don't run this script as root. Use a regular user with sudo access."
-    exit 1
+    print_warning "Running as root user. Proceeding with root setup."
+    USER_NAME="root"
+    HOME_DIR="/root"
+    SKIP_DOCKER_GROUP=true
+else
+    USER_NAME=$(whoami)
+    HOME_DIR=$HOME
+    SKIP_DOCKER_GROUP=false
 fi
 
-# Get current user
-USER_NAME=$(whoami)
 PROJECT_DIR=$(pwd)
 
 print_status "Setting up for user: $USER_NAME"
 print_status "Project directory: $PROJECT_DIR"
+print_status "Home directory: $HOME_DIR"
 
 # 1. Check Python version
 echo -e "\n${YELLOW}Step 1: Checking Python installation${NC}"
@@ -137,10 +142,14 @@ echo -e "\n${YELLOW}Step 8: Checking Docker installation${NC}"
 if command -v docker &> /dev/null; then
     print_status "Docker is installed"
 
-    # Add user to docker group if not already
-    if ! groups $USER_NAME | grep -q "docker"; then
-        print_warning "Adding $USER_NAME to docker group. You may need to log out and log back in."
-        sudo usermod -aG docker $USER_NAME
+    # Add user to docker group if not already (skip for root)
+    if [ "$SKIP_DOCKER_GROUP" = false ]; then
+        if ! groups $USER_NAME | grep -q "docker"; then
+            print_warning "Adding $USER_NAME to docker group. You may need to log out and log back in."
+            sudo usermod -aG docker $USER_NAME
+        fi
+    else
+        print_status "Running as root, skipping docker group setup"
     fi
 
     # Check docker-compose
@@ -148,16 +157,25 @@ if command -v docker &> /dev/null; then
         print_status "Docker Compose is installed"
     else
         print_warning "Docker Compose not found. Installing..."
-        sudo apt install -y docker-compose
+        if [ "$EUID" -eq 0 ]; then
+            apt install -y docker-compose
+        else
+            sudo apt install -y docker-compose
+        fi
     fi
 else
     print_warning "Docker is not installed. API server deployment requires Docker."
-    print_warning "To install Docker, run: curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh"
+    if [ "$EUID" -eq 0 ]; then
+        print_warning "To install Docker, run: curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh"
+    else
+        print_warning "To install Docker, run: curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh"
+    fi
 fi
 
 # 9. Setup log rotation
 echo -e "\n${YELLOW}Step 9: Setting up log rotation${NC}"
-sudo tee /etc/logrotate.d/xgboost-pipeline > /dev/null << EOF
+if [ "$EUID" -eq 0 ]; then
+    tee /etc/logrotate.d/xgboost-pipeline > /dev/null << EOF
 $PROJECT_DIR/logs/*.log {
     daily
     missingok
@@ -168,6 +186,19 @@ $PROJECT_DIR/logs/*.log {
     copytruncate
 }
 EOF
+else
+    sudo tee /etc/logrotate.d/xgboost-pipeline > /dev/null << EOF
+$PROJECT_DIR/logs/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+}
+EOF
+fi
 print_status "Configured log rotation"
 
 # 10. Create startup scripts
@@ -207,8 +238,14 @@ echo -e "2. ${GREEN}Test the pipeline:${NC}"
 echo -e "   python daily_runner.py --dry-run\n"
 
 echo -e "3. ${GREEN}Enable daily runs:${NC}"
-echo -e "   sudo systemctl enable xgboost-daily.timer"
-echo -e "   sudo systemctl start xgboost-daily.timer\n"
+if [ "$EUID" -eq 0 ]; then
+    echo -e "   systemctl enable xgboost-daily.timer"
+    echo -e "   systemctl start xgboost-daily.timer"
+else
+    echo -e "   sudo systemctl enable xgboost-daily.timer"
+    echo -e "   sudo systemctl start xgboost-daily.timer"
+fi
+echo -e ""
 
 echo -e "4. ${GREEN}Start API server (option A):${NC}"
 echo -e "   ./start_api.sh\n"
@@ -220,8 +257,13 @@ echo -e "6. ${GREEN}Check API health:${NC}"
 echo -e "   curl http://localhost:8000/api/v1/health\n"
 
 echo -e "${YELLOW}Useful Commands:${NC}"
-echo -e "- Check timer status: systemctl status xgboost-daily.timer"
-echo -e "- View logs: sudo journalctl -u xgboost-daily.service -f"
+if [ "$EUID" -eq 0 ]; then
+    echo -e "- Check timer status: systemctl status xgboost-daily.timer"
+    echo -e "- View logs: journalctl -u xgboost-daily.service -f"
+else
+    echo -e "- Check timer status: systemctl status xgboost-daily.timer"
+    echo -e "- View logs: sudo journalctl -u xgboost-daily.service -f"
+fi
 echo -e "- API docs: http://localhost:8000/docs"
 echo -e "- Stop API: docker-compose -f docker-compose.api.yml down\n"
 
