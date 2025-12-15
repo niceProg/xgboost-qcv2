@@ -36,7 +36,8 @@ ENABLE_DB_STORAGE=true
 EXCHANGE=binance
 PAIR=BTCUSDT
 INTERVAL=1h
-TRADING_HOURS=7:00-16:00
+# Trading hours in UTC (7:00-16:00 WIB = 00:00-09:00 UTC)
+TRADING_HOURS=00:00-09:00
 TIMEZONE=WIB  # Waktu Indonesia Barat
 
 # Model Evaluation
@@ -89,8 +90,8 @@ Setelah initial setup selesai, jalankan daily pipeline:
 
 ### Manual Daily Run
 ```bash
-# Jalankan untuk data hari ini (jam 7-4 sore)
-python run_daily_pipeline.py --mode daily --trading-hours 7:00-16:00 --timezone WIB
+# Jalankan untuk data hari ini (jam 7-4 sore WIB)
+python run_daily_pipeline.py --mode daily --trading-hours 00:00-09:00 --timezone WIB
 
 # Atau dengan parameters:
 python run_daily_pipeline.py --mode daily --exchange binance --pair BTCUSDT --interval 1h

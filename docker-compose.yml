@@ -1,37 +1,6 @@
 version: '3.8'
 
 services:
-  # MySQL database for storing trading data
-  trading_db:
-    image: mysql:8.0
-    container_name: xgboost_trading_db
-    environment:
-      MYSQL_ROOT_PASSWORD: trading_password
-      MYSQL_DATABASE: trading_data
-      MYSQL_USER: trading_user
-      MYSQL_PASSWORD: trading_password
-    ports:
-      - "3307:3306"
-    volumes:
-      - trading_data:/var/lib/mysql
-      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
-    restart: unless-stopped
-
-  # MySQL database for storing training results
-  results_db:
-    image: mysql:8.0
-    container_name: xgboost_results_db
-    environment:
-      MYSQL_ROOT_PASSWORD: results_password
-      MYSQL_DATABASE: xgboost_training
-      MYSQL_USER: xgboost_user
-      MYSQL_PASSWORD: results_password
-    ports:
-      - "3308:3306"
-    volumes:
-      - training_data:/var/lib/mysql
-    restart: unless-stopped
-
   # XGBoost Trading Pipeline
   xgboost_pipeline:
     build:
@@ -39,71 +8,120 @@ services:
       dockerfile: Dockerfile
     container_name: xgboost_pipeline
     environment:
-      # Trading database
-      DB_HOST: trading_db
-      DB_PORT: 3306
-      DB_NAME: trading_data
-      DB_USER: trading_user
-      DB_PASSWORD: trading_password
+      # Load from .env file (recommended for security)
+      - DATABASE_URL_TRADING_FILE=/run/secrets/trading_db.env
+      - DATABASE_URL_RESULTS_FILE=/run/secrets/results_db.env
 
-      # Results database
-      RESULTS_DB_HOST: results_db
-      RESULTS_DB_PORT: 3306
-      RESULTS_DB_NAME: xgboost_training
-      RESULTS_DB_USER: xgboost_user
-      RESULTS_DB_PASSWORD: results_password
+      # Or directly from .env (less secure but simpler)
+      - TRADING_DB_HOST=${TRADING_DB_HOST}
+      - TRADING_DB_PORT=${TRADING_DB_PORT:-3306}
+      - TRADING_DB_USER=${TRADING_DB_USER}
+      - TRADING_DB_PASSWORD=${TRADING_DB_PASSWORD}
+      - TRADING_DB_NAME=${TRADING_DB_NAME}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
 
-      # Enable database storage
-      ENABLE_DB_STORAGE: true
+      # Pipeline Configuration
+      - ENABLE_DB_STORAGE=${ENABLE_DB_STORAGE:-true}
+      - EXCHANGE=${EXCHANGE:-binance}
+      - PAIR=${PAIR:-BTCUSDT}
+      - INTERVAL=${INTERVAL:-1h}
+      - TRADING_HOURS=${TRADING_HOURS:-00:00-09:00}  # 7:00-16:00 WIB in UTC
+      - TIMEZONE=${TIMEZONE:-WIB}
+      - MODE=${MODE:-daily}
+      - OUTPUT_DIR=${OUTPUT_DIR:-/app/output_train}
 
-      # API config
-      API_PORT: 8000
-
-      # Default parameters
-      EXCHANGE: binance
-      PAIR: BTCUSDT
-      INTERVAL: 1h
-      TRADING_HOURS: "7:00-16:00"
-      TIMEZONE: "UTC"
     volumes:
-      - ./output_train:/app/output_train
-    depends_on:
-      - trading_db
-      - results_db
-    restart: unless-stopped
+      # Server volumes (not Docker volumes)
+      - /opt/xgboost-qc/output_train:/app/output_train
+      - /opt/xgboost-qc/.env:/app/.env:ro  # Read-only .env
 
-  # API Server (separate container for production)
+      # Optional: For secret files (more secure)
+      - /run/secrets:/run/secrets:ro
+    restart: unless-stopped
+    command: ["python", "run_daily_pipeline.py"]
+    profiles:
+      - pipeline
+
+  # API Server
   api_server:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: xgboost_api_server
-    command: ["python", "api_examples.py"]
     environment:
-      # Results database
-      DB_HOST: results_db
-      DB_PORT: 3306
-      DB_NAME: xgboost_training
-      DB_USER: xgboost_user
-      DB_PASSWORD: results_password
+      # Load from .env file
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
 
-      # API config
-      API_PORT: 8000
-      ENV: production
+      # API Configuration
+      - API_PORT=${API_PORT:-8000}
+      - ENV=${ENV:-production}
+      - OUTPUT_DIR=${OUTPUT_DIR:-/app/output_train}
+
+    volumes:
+      # Server volumes
+      - /opt/xgboost-qc/output_train:/app/output_train:ro  # Read-only for API
+      - /opt/xgboost-qc/.env:/app/.env:ro  # Read-only .env
+
+      # Log directory on server
+      - /opt/xgboost-qc/logs:/app/logs
+
     ports:
-      - "8000:8000"
-    depends_on:
-      - results_db
+      - "${API_PORT:-8000}:8000"
     restart: unless-stopped
+    command: ["python", "api_server.py"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     profiles:
-      - production
+      - api
 
-volumes:
-  trading_data:
-    driver: local
-  training_data:
-    driver: local
+  # Scheduler (optional)
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xgboost_scheduler
+    environment:
+      # Same environment as pipeline
+      - TRADING_DB_HOST=${TRADING_DB_HOST}
+      - TRADING_DB_PORT=${TRADING_DB_PORT:-3306}
+      - TRADING_DB_USER=${TRADING_DB_USER}
+      - TRADING_DB_PASSWORD=${TRADING_DB_PASSWORD}
+      - TRADING_DB_NAME=${TRADING_DB_NAME}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+
+      - ENABLE_DB_STORAGE=${ENABLE_DB_STORAGE:-true}
+      - EXCHANGE=${EXCHANGE:-binance}
+      - PAIR=${PAIR:-BTCUSDT}
+      - INTERVAL=${INTERVAL:-1h}
+      - TRADING_HOURS=${TRADING_HOURS:-00:00-09:00}  # 7:00-16:00 WIB in UTC
+      - TIMEZONE=${TIMEZONE:-WIB}
+
+    volumes:
+      - /opt/xgboost-qc/.env:/app/.env:ro
+      - /opt/xgboost-qc/logs:/app/logs
+
+    restart: unless-stopped
+    command: ["python", "scheduler.py"]
+    profiles:
+      - scheduler
 
 networks:
   default:
     name: xgboost_network
+    driver: bridge

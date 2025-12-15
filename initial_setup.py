@@ -60,7 +60,7 @@ def initial_setup():
     pair = os.getenv('PAIR', 'BTCUSDT')
     interval = os.getenv('INTERVAL', '1h')
     output_dir = os.getenv('OUTPUT_DIR', './output_train')
-    trading_hours = os.getenv('TRADING_HOURS', '7:00-16:00')
+    trading_hours = os.getenv('TRADING_HOURS', '00:00-09:00')  # 7:00-16:00 WIB in UTC
     timezone = os.getenv('TIMEZONE', 'UTC')
 
     logger.info(f"Parameters: {exchange}/{pair}/{interval}")

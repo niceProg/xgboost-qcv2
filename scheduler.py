@@ -33,7 +33,7 @@ class PipelineScheduler:
         self.exchange = os.getenv('EXCHANGE', 'binance')
         self.pair = os.getenv('PAIR', 'BTCUSDT')
         self.interval = os.getenv('INTERVAL', '1h')
-        self.trading_hours = os.getenv('TRADING_HOURS', '7:00-16:00')
+        self.trading_hours = os.getenv('TRADING_HOURS', '00:00-09:00')  # 7:00-16:00 WIB in UTC
         self.timezone = os.getenv('TIMEZONE', 'UTC')
 
         # Parse trading hours
