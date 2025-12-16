@@ -29,3 +29,9 @@ typing_extensions==4.15.0
 tzdata==2025.3
 xgboost==2.1.4
 zipp==3.23.0
+
+# FastAPI dependencies
+fastapi==0.124.4
+uvicorn==0.38.0
+pydantic==2.12.5
+pydantic_core==2.41.5

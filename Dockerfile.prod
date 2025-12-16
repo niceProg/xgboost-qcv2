@@ -18,14 +18,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Copy requirements first for better caching
+# Copy requirements first for better Docker caching
 COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Copy project files after dependencies installed
 COPY . .
 
 # Create necessary directories with proper permissions
@@ -46,5 +46,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Default command - can be overridden in docker-compose
+# Default command - run FastAPI server
 CMD ["python", "api_server_v2.py"]
