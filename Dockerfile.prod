@@ -13,7 +13,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
-    libmariadbclient-dev \
+    libmariadb-dev \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
