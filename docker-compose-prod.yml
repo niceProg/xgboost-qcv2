@@ -1,0 +1,141 @@
+version: '3.8'
+
+services:
+  # XGBoost API Server - Production
+  xgboost_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xgboost_api
+    command: ["python", "api_server_v2.py"]
+    environment:
+      # Trading Database (external)
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+      # Results Database (external)
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+
+      # Configuration
+      ENABLE_DB_STORAGE: ${ENABLE_DB_STORAGE:-true}
+      API_PORT: ${API_PORT:-8000}
+      ENV: ${ENV:-production}
+      OUTPUT_DIR: /app/output_train
+
+      # Default trading settings
+      EXCHANGE: ${EXCHANGE:-binance}
+      PAIR: ${PAIR:-BTCUSDT}
+      INTERVAL: ${INTERVAL:-1h}
+      LEVERAGE: ${LEVERAGE:-10}
+      THRESHOLD: ${THRESHOLD:-0.5}
+      FEE_RATE: ${FEE_RATE:-0.0004}
+      SLIPPAGE_RATE: ${SLIPPAGE_RATE:-0}
+
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./output_train:/app/output_train:ro  # read-only for security
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${API_PORT:-8000}/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Daily Pipeline Runner (Optional - for scheduled runs)
+  xgboost_pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xgboost_pipeline
+    command: ["python", "daily_runner.py"]
+    environment:
+      # Trading Database (external)
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+      # Results Database (external)
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+
+      # Configuration
+      ENABLE_DB_STORAGE: ${ENABLE_DB_STORAGE:-true}
+      OUTPUT_DIR: /app/output_train
+
+      # Trading settings
+      EXCHANGE: ${EXCHANGE:-binance}
+      PAIR: ${PAIR:-BTCUSDT}
+      INTERVAL: ${INTERVAL:-1h}
+      LEVERAGE: ${LEVERAGE:-10}
+      THRESHOLD: ${THRESHOLD:-0.5}
+      FEE_RATE: ${FEE_RATE:-0.0004}
+      SLIPPAGE_RATE: ${SLIPPAGE_RATE:-0}
+
+    volumes:
+      - ./output_train:/app/output_train
+      - ./logs:/app/logs
+    restart: "no"  # Manual or cron trigger
+    profiles:
+      - pipeline
+
+  # Multi-day Runner (Optional - for batch processing)
+  xgboost_batch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xgboost_batch
+    command: ["python", "multi_day_runner.py"]
+    environment:
+      # Trading Database (external)
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+      # Results Database (external)
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+
+      # Configuration
+      ENABLE_DB_STORAGE: ${ENABLE_DB_STORAGE:-true}
+      OUTPUT_DIR: /app/output_train
+
+      # Trading settings
+      EXCHANGE: ${EXCHANGE:-binance}
+      PAIR: ${PAIR:-BTCUSDT}
+      INTERVAL: ${INTERVAL:-1h}
+      LEVERAGE: ${LEVERAGE:-10}
+      THRESHOLD: ${THRESHOLD:-0.5}
+      FEE_RATE: ${FEE_RATE:-0.0004}
+      SLIPPAGE_RATE: ${SLIPPAGE_RATE:-0}
+
+    volumes:
+      - ./output_train:/app/output_train
+      - ./logs:/app/logs
+    restart: "no"  # Manual trigger only
+    profiles:
+      - batch
+
+networks:
+  default:
+    name: xgboost_prod_network
+    driver: bridge
