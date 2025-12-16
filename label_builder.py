@@ -263,6 +263,69 @@ class LabelBuilder:
             f.write(f"Intervals: {list(df['interval'].unique())}\n")
         logger.info(f"Dataset summary saved to {summary_file}")
 
+        # Save labeled data to database if enabled
+        if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
+            try:
+                from database_storage import DatabaseStorage
+                import pymysql
+                from dotenv import load_dotenv
+                load_dotenv()
+
+                conn = pymysql.connect(
+                    host=os.getenv('DB_HOST', '103.150.81.86'),
+                    port=int(os.getenv('DB_PORT', 3306)),
+                    database=os.getenv('DB_NAME', 'xgboostqc'),
+                    user=os.getenv('DB_USER', 'xgboostqc'),
+                    password=os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
+                )
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    "SELECT session_id FROM xgboost_training_sessions "
+                    "WHERE status = 'data_loaded' ORDER BY created_at DESC LIMIT 1"
+                )
+                result = cursor.fetchone()
+                conn.close()
+
+                if result:
+                    session_id = result[0]
+
+                    # Store labeled data sample
+                    sample_df = df.head(100)  # First 100 rows
+                    db_storage = DatabaseStorage()
+                    db_storage.store_feature_data(
+                        session_id=session_id,
+                        feature_type='labeled_data',
+                        data=sample_df,
+                        description=f"Labeled data for training, {len(df)} total rows, showing sample of 100"
+                    )
+                    logger.info(f"Stored labeled data sample to database for session: {session_id}")
+
+                    # Store training data metadata
+                    metadata = {
+                        'total_samples': len(df),
+                        'feature_count': len(X.columns),
+                        'bullish_samples': int(y.sum()),
+                        'bearish_samples': int(len(y) - y.sum()),
+                        'bullish_ratio': float(y.mean()),
+                        'bearish_ratio': float(1 - y.mean()),
+                        'feature_list': list(X.columns),
+                        'time_range': {
+                            'start': str(df['time'].min()),
+                            'end': str(df['time'].max())
+                        }
+                    }
+                    db_storage.store_feature_data(
+                        session_id=session_id,
+                        feature_type='training_metadata',
+                        data=pd.DataFrame([metadata]),
+                        description="Training data metadata and label distribution"
+                    )
+                    logger.info(f"Stored training metadata to database")
+
+            except Exception as e:
+                logger.warning(f"Failed to save labeled data to database: {e}")
+
 def main():
     """Main function to build labels."""
     args = parse_arguments()

@@ -307,6 +307,52 @@ class TableMerger:
                 f.write(f"{col}\n")
         logger.info(f"Column mapping saved to {mapping_file}")
 
+        # Save merged data to database if enabled
+        if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
+            try:
+                from database_storage import DatabaseStorage
+
+                db_storage = DatabaseStorage(
+                    db_config={
+                        'host': os.getenv('DB_HOST', '103.150.81.86'),
+                        'port': int(os.getenv('DB_PORT', 3306)),
+                        'database': os.getenv('DB_NAME', 'xgboostqc'),
+                        'user': os.getenv('DB_USER', 'xgboostqc'),
+                        'password': os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
+                    }
+                )
+
+                # Get session ID
+                import pymysql
+                from dotenv import load_dotenv
+                load_dotenv()
+
+                conn = pymysql.connect(**db_config)
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    "SELECT session_id FROM xgboost_training_sessions "
+                    "WHERE status = 'data_loaded' ORDER BY created_at DESC LIMIT 1"
+                )
+                result = cursor.fetchone()
+                conn.close()
+
+                if result:
+                    session_id = result[0]
+
+                    # Store merged data sample
+                    sample_df = df.head(100)  # First 100 rows
+                    db_storage.store_feature_data(
+                        session_id=session_id,
+                        feature_type='merged_data',
+                        data=sample_df,
+                        description=f"Merged data from 7 tables, {len(df)} total rows, showing sample of 100"
+                    )
+                    logger.info(f"Stored merged data sample to database for session: {session_id}")
+
+            except Exception as e:
+                logger.warning(f"Failed to save merged data to database: {e}")
+
 def main():
     """Main function to merge all tables."""
     args = parse_arguments()
