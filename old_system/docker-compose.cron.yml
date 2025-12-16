@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # Cron service for scheduled pipeline runs
+  xgboost_cron:
+    build:
+      context: .
+      dockerfile: Dockerfile.cron
+    container_name: xgboost_cron
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # Allow Docker control
+      - .:/app  # Mount project directory
+      - ./logs:/var/log  # Log directory
+    environment:
+      - TZ=Asia/Jakarta
+    restart: unless-stopped
+    depends_on:
+      - xgboost_api
+
+  # Main API server
+  xgboost_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xgboost_api
+    command: ["python", "api_server_v2.py"]
+    environment:
+      # ... (same as your prod config)
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./output_train:/app/output_train
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+networks:
+  default:
+    name: xgboost_network

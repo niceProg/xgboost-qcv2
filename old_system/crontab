@@ -1,0 +1,20 @@
+# Run XGBoost training pipeline every 6 hours
+# Adjust timing as needed (WIB timezone)
+
+# 00:00 WIB - Midnight
+0 0 * * * cd /app && docker-compose -f docker-compose-prod.yml run --rm xgboost_pipeline >> /var/log/xgboost_cron.log 2>&1
+
+# 06:00 WIB - Morning
+0 6 * * * cd /app && docker-compose -f docker-compose-prod.yml run --rm xgboost_pipeline >> /var/log/xgboost_cron.log 2>&1
+
+# 12:00 WIB - Noon
+0 12 * * * cd /app && docker-compose -f docker-compose-prod.yml run --rm xgboost_pipeline >> /var/log/xgboost_cron.log 2>&1
+
+# 18:00 WIB - Evening
+0 18 * * * cd /app && docker-compose -f docker-compose-prod.yml run --rm xgboost_pipeline >> /var/log/xgboost_cron.log 2>&1
+
+# Optional: Weekly cleanup (Sunday 02:00 WIB)
+0 2 * * 0 find /app/output_train -name "*.json" -mtime +30 -delete && find /app/output_train -name "*.joblib" -mtime +30 -delete >> /var/log/xgboost_cleanup.log 2>&1
+
+# Health check every hour
+0 * * * * curl -f http://xgboost_api:8000/api/v1/health || echo "$(date): API health check failed" >> /var/log/health_check.log 2>&1

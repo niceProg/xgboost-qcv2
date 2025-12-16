@@ -1,0 +1,26 @@
+FROM alpine:latest
+
+# Install dependencies
+RUN apk add --no-cache \
+    docker-cli \
+    docker-compose \
+    curl \
+    bash
+
+# Create cron directory
+RUN mkdir -p /etc/cron.d
+
+# Copy crontab file
+COPY crontab /etc/cron.d/xgboost-cron
+
+# Give execution rights
+RUN chmod 0644 /etc/cron.d/xgboost-cron
+
+# Apply cron job
+RUN crontab /etc/cron.d/xgboost-cron
+
+# Create the log file
+RUN touch /var/log/cron.log
+
+# Run the command on startup
+CMD ["crond", "-f", "-l", "8"]

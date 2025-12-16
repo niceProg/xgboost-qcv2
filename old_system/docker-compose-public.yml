@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # FastAPI Real-time Server (Public)
+  xgboost_realtime_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xgboost_realtime_api
+    command: ["python", "realtime_api.py"]
+    ports:
+      - "8000:8000"  # Public access
+    environment:
+      # Database connection
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+      # Configuration
+      OUTPUT_DIR: /app/output_train
+      API_PORT: 8000
+
+      # CORS untuk QuantConnect
+      CORS_ORIGINS: "https://www.quantconnect.com"
+
+      # Notifications
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+
+    volumes:
+      - ./output_train:/app/output_train
+      - ./state:/app/state
+      - ./realtime_data:/app/realtime_data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Real-time Monitor (Background)
+  realtime_monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: realtime_monitor
+    command: ["python", "realtime_monitor.py"]
+    environment:
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+      OUTPUT_DIR: /app/output_train
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./output_train:/app/output_train
+      - ./state:/app/state
+      - ./realtime_data:/app/realtime_data
+    restart: unless-stopped
+    depends_on:
+      - xgboost_realtime_api
+
+  # Nginx Reverse Proxy (SSL/TLS)
+  nginx:
+    image: nginx:alpine
+    container_name: xgboost_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - xgboost_realtime_api
+    restart: unless-stopped
+
+  # Let's Encrypt for SSL (optional)
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./ssl:/etc/letsencrypt
+      - /etc/letsencrypt:/etc/letsencrypt
+    command: certonly --webroot --webroot-path=/var/www/html --email your-email@example.com --agree-tos --no-eff-email -d your-domain.com
+    profiles:
+      - ssl
+
+volumes:
+  ssl_data:
+
+networks:
+  default:
+    name: xgboost_public_network

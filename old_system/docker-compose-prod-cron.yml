@@ -1,0 +1,236 @@
+version: '3.8'
+
+services:
+  # Daily Runner - Main training pipeline
+  xgboost_daily_runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: xgboost_daily_runner
+    command: ["python", "daily_runner.py"]
+
+    environment:
+      # Database
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+      # Results Database
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+
+      # Configuration
+      ENABLE_DB_STORAGE: "true"
+      OUTPUT_DIR: /app/output_train
+      ENV: production
+      TIMEZONE: "Asia/Jakarta"
+
+      # Training parameters
+      EXCHANGE: "binance"
+      PAIR: "BTCUSDT,ETHUSDT"
+      INTERVAL: "1h,4h"
+      DAYS_TO_LOAD: 30
+
+      # Notifications
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+
+    volumes:
+      - ./output_train:/app/output_train
+      - ./logs:/app/logs
+      - ./state:/app/state
+
+    restart: "no"  # Controlled by cron
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # Cron Service - Scheduler
+  xgboost_cron:
+    image: alpine:latest
+    container_name: xgboost_cron
+    command: >
+      sh -c "
+        echo 'Installing crontab...' &&
+        echo '0 2 * * * cd /app && docker-compose -f docker-compose-prod-cron.yml run --rm xgboost_daily_runner >> /var/log/cron/daily_runner.log 2>&1' > /etc/crontabs/root &&
+        echo '0 6,12,18 * * * cd /app && docker-compose -f docker-compose-prod-cron.yml run --rm xgboost_realtime_trainer >> /var/log/cron/realtime_trainer.log 2>&1' >> /etc/crontabs/root &&
+        echo '0 3 * * * cd /app && python -c \"from notification_manager import ModelUpdateNotifier; n = ModelUpdateNotifier(); n.send_upload_reminder()\"' >> /etc/crontabs/root &&
+        chmod 600 /etc/crontabs/root &&
+        echo 'Starting cron...' &&
+        exec crond -f -l 8
+      "
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/app:ro
+      - ./logs/cron:/var/log/cron
+
+    restart: unless-stopped
+
+    environment:
+      - TZ=Asia/Jakarta
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+
+  # Real-time Trainer - Incremental updates
+  xgboost_realtime_trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: xgboost_realtime_trainer
+    command: ["python", "realtime_trainer.py", "--mode", "incremental"]
+
+    environment:
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+      OUTPUT_DIR: /app/output_train
+      ENV: production
+
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+
+    volumes:
+      - ./output_train:/app/output_train
+      - ./state:/app/state
+      - ./realtime_data:/app/realtime_data
+
+    restart: "no"  # Controlled by cron
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 3G
+
+  # Model Evaluation
+  xgboost_evaluator:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: xgboost_evaluator
+    command: ["python", "model_evaluation_with_leverage.py", "--mode", "production"]
+
+    environment:
+      TRADING_DB_HOST: ${TRADING_DB_HOST}
+      TRADING_DB_PORT: ${TRADING_DB_PORT}
+      TRADING_DB_USER: ${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+      OUTPUT_DIR: /app/output_train
+      ENV: production
+
+      # Evaluation parameters
+      INITIAL_CASH: 100000
+      LEVERAGE: 10
+      MARGIN_FRACTION: 0.1
+      FEE_RATE: 0.0004
+      SLIPPAGE_RATE: 0.001
+
+    volumes:
+      - ./output_train:/app/output_train
+      - ./logs:/app/logs
+
+    restart: "no"  # Run after training
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+
+  # Backup Service
+  backup_service:
+    image: alpine:latest
+    container_name: xgboost_backup
+    command: >
+      sh -c "
+        echo 'Setting up backup cron...' &&
+        echo '0 4 * * * cd /app && tar -czf /backup/xgboost_backup_$(date +\%Y\%m\%d).tar.gz ./output_train ./state' > /etc/crontabs/root &&
+        echo '0 5 * * * find /backup -name \"xgboost_backup_*.tar.gz\" -mtime +30 -delete' >> /etc/crontabs/root &&
+        chmod 600 /etc/crontabs/root &&
+        echo 'Starting backup service...' &&
+        exec crond -f -l 8
+      "
+
+    volumes:
+      - ./output_train:/app/output_train:ro
+      - ./state:/app/state:ro
+      - ./backups:/backup
+      - ./logs/cron:/var/log/cron
+
+    restart: unless-stopped
+
+    environment:
+      - TZ=Asia/Jakarta
+
+  # Log Monitor
+  log_monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: xgboost_log_monitor
+    command: ["python", "-c", "
+      import os
+      import time
+      import subprocess
+      from datetime import datetime
+
+      print('🔍 Log Monitor Started')
+
+      while True:
+          try:
+              # Check for errors in logs
+              error_count = subprocess.run(
+                  'grep -c \"ERROR\" /app/logs/cron/*.log 2>/dev/null || echo 0',
+                  shell=True, capture_output=True, text=True
+              ).stdout.strip()
+
+              if int(error_count) > 5:
+                  print(f'⚠️ High error count detected: {error_count}')
+                  # Send notification here if needed
+
+              time.sleep(300)  # Check every 5 minutes
+          except Exception as e:
+              print(f'Log monitor error: {e}')
+              time.sleep(60)
+    "]
+
+    volumes:
+      - ./logs:/app/logs:ro
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 256M
+
+volumes:
+  backups:
+
+networks:
+  default:
+    name: xgboost_cron_network
