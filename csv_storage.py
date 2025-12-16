@@ -32,7 +32,34 @@ class CSVStorage:
         """Get database connection"""
         return pymysql.connect(**self.db_config)
 
-    # Feature importance saving removed as requested
+    def save_feature_importance(self, csv_path: Path, session_id: str, model_name: str):
+        """Save feature importance CSV to database"""
+        try:
+            df = pd.read_csv(csv_path)
+
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # Delete existing entries for this model
+            cursor.execute(
+                "DELETE FROM xgboost_feature_importance WHERE session_id = %s AND model_name = %s",
+                (session_id, model_name)
+            )
+
+            # Insert feature importance data
+            for _, row in df.iterrows():
+                cursor.execute("""
+                    INSERT INTO xgboost_feature_importance (
+                        session_id, model_name, feature, importance
+                    ) VALUES (%s, %s, %s, %s)
+                """, (session_id, model_name, row['feature'], row['importance']))
+
+            conn.commit()
+            conn.close()
+            logger.info(f"Saved {len(df)} feature importance records")
+
+        except Exception as e:
+            logger.error(f"Error saving feature importance: {e}")
 
     def save_trades_summary(self, csv_path: Path, session_id: str):
         """Save trades summary CSV to database"""
@@ -75,7 +102,35 @@ class CSVStorage:
         except Exception as e:
             logger.error(f"Error saving trades summary: {e}")
 
-    # CSV metadata saving removed as requested
+    def save_csv_metadata(self, csv_path: Path, session_id: str, file_type: str, description: str = None):
+        """Save CSV file metadata to database"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # Get row count
+            df = pd.read_csv(csv_path, nrows=10)
+            row_count = len(df) if len(df) > 0 else 0
+
+            # Get file size
+            file_size = csv_path.stat().st_size
+
+            cursor.execute("""
+                INSERT INTO xgboost_csv_files (
+                    session_id, file_name, file_path, file_size,
+                    file_type, row_count, description
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                session_id, csv_path.name, str(csv_path), file_size,
+                file_type, row_count, description
+            ))
+
+            conn.commit()
+            conn.close()
+            logger.info(f"Saved CSV metadata: {csv_path.name}")
+
+        except Exception as e:
+            logger.error(f"Error saving CSV metadata: {e}")
 
     def save_account_statement_sample(self, csv_path: Path, session_id: str, statement_type: str):
         """Save sample of account statement"""
@@ -115,8 +170,14 @@ class CSVStorage:
             logger.error(f"Error saving account statement: {e}")
 
     def save_all_csv_outputs(self, output_dir: Path, session_id: str, model_name: str):
-        """Save selected CSV outputs from a training session"""
+        """Save all CSV outputs from a training session"""
         logger.info("Saving CSV outputs to database...")
+
+        # Save feature importance
+        feature_files = list(output_dir.glob("feature_importance_*.csv"))
+        for feature_file in feature_files:
+            if session_id in feature_file.name:
+                self.save_feature_importance(feature_file, session_id, model_name)
 
         # Save trades summary
         trades_file = output_dir / "trades.csv"
@@ -132,5 +193,24 @@ class CSVStorage:
 
         if cash_file.exists():
             self.save_account_statement_sample(cash_file, session_id, 'cash')
+
+        # Save metadata for all CSV files
+        csv_files = list(output_dir.glob("*.csv"))
+        for csv_file in csv_files:
+            file_type = csv_file.name.split('_')[0] if '_' in csv_file.name else 'unknown'
+            description = f"CSV output from XGBoost pipeline - {csv_file.name}"
+
+            if 'feature_importance' in csv_file.name:
+                description = "Feature importance scores from trained XGBoost model"
+            elif 'trades' in csv_file.name:
+                description = "Summary of all completed trades with P&L"
+            elif 'trade_events' in csv_file.name:
+                description = "Detailed log of all trading events"
+            elif 'rekening_koran' in csv_file.name:
+                description = "Account statement showing equity/cash balance over time"
+            elif 'merged_7_tables' in csv_file.name:
+                description = "Merged data from all 7 source tables"
+
+            self.save_csv_metadata(csv_file, session_id, file_type, description)
 
         logger.info("CSV outputs saved to database successfully!")

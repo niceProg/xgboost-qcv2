@@ -579,41 +579,6 @@ class ModelEvaluator:
             self.save_evaluation_to_database(metrics, report, timestamp)
             self.update_session_trading_metrics(metrics, report)
 
-            # Save CSV outputs to database
-            from csv_storage import CSVStorage
-            csv_storage = CSVStorage()
-
-            # Get session ID from database
-            import pymysql
-            from dotenv import load_dotenv
-            load_dotenv()
-
-            db_config = {
-                'host': os.getenv('DB_HOST', '103.150.81.86'),
-                'port': int(os.getenv('DB_PORT', 3306)),
-                'database': os.getenv('DB_NAME', 'xgboostqc'),
-                'user': os.getenv('DB_USER', 'xgboostqc'),
-                'password': os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
-            }
-
-            conn = pymysql.connect(**db_config)
-            cursor = conn.cursor()
-
-            cursor.execute(
-                "SELECT session_id FROM xgboost_training_sessions "
-                "WHERE status = 'completed' ORDER BY created_at DESC LIMIT 1"
-            )
-            result = cursor.fetchone()
-            conn.close()
-
-            if result:
-                session_id = result[0]
-                model_path = self.output_dir / "latest_model.joblib"
-                model_name = os.path.basename(model_path) if model_path.exists() else "unknown_model"
-
-                # Save all CSV outputs
-                csv_storage.save_all_csv_outputs(self.output_dir, session_id, model_name)
-
     def save_evaluation_to_database(self, metrics: dict, report: dict, timestamp: str):
         """Save evaluation results to xgboostqc database."""
         try:
