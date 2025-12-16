@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Load data from 6 trading tables with filtering capabilities.
+Load data from 7 trading tables with filtering capabilities.
 Extracts data based on exchange, pair, interval, time, and days parameters.
-Enhanced with taker volume data for improved prediction accuracy.
 """
 
 import pandas as pd
@@ -20,9 +19,6 @@ from typing import Dict, Optional, List, Tuple
 # Import our command line options handler
 from command_line_options import parse_arguments, validate_arguments, DataFilter
 
-# Import database storage
-from database_storage import DatabaseStorage
-
 # Load environment variables
 load_dotenv()
 
@@ -34,31 +30,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class DatabaseLoader:
-    """Load data from database tables with filtering capabilities (enhanced with taker volume)."""
+    """Load data from database tables with filtering capabilities."""
 
-    def __init__(self, data_filter: DataFilter, output_dir: str = './output_train',
-                 enable_db_storage: bool = True):
+    def __init__(self, data_filter: DataFilter, output_dir: str = './output_train'):
         self.data_filter = data_filter
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
 
-        # Initialize database storage
-        self.enable_db_storage = enable_db_storage
-        if enable_db_storage:
-            self.db_storage = DatabaseStorage(storage_path=output_dir)
-        else:
-            self.db_storage = None
-
-        # Database configuration from .env file (trading database)
+        # Database configuration from .env file
         self.db_config = {
-            'host': os.getenv('TRADING_DB_HOST'),
-            'port': int(os.getenv('TRADING_DB_PORT', 3306)),
-            'database': os.getenv('TRADING_DB_NAME'),
-            'user': os.getenv('TRADING_DB_USER'),
-            'password': os.getenv('TRADING_DB_PASSWORD')
+            'host': os.getenv('DB_HOST'),
+            'port': int(os.getenv('DB_PORT')),
+            'database': os.getenv('DB_NAME'),
+            'user': os.getenv('DB_USER'),
+            'password': os.getenv('DB_PASSWORD')
         }
 
-        # Define table schemas (6 tables with taker volume added)
+        # Define table schemas
         self.tables = {
             'cg_spot_price_history': {
                 'time_col': 'time',
@@ -87,6 +75,14 @@ class DatabaseLoader:
                 'pair_col': 'symbol',
                 'key_columns': ['time', 'exchange_name', 'symbol', 'interval'],
                 'data_columns': ['aggregated_buy_volume_usd', 'aggregated_sell_volume_usd']
+            },
+            'cg_spot_aggregated_ask_bids_history': {
+                'time_col': 'time',
+                'exchange_col': 'exchange_name',
+                'pair_col': 'symbol',
+                'key_columns': ['time', 'exchange_name', 'symbol', 'interval'],
+                'data_columns': ['aggregated_bids_usd', 'aggregated_bids_quantity',
+                               'aggregated_asks_usd', 'aggregated_asks_quantity']
             },
             'cg_long_short_global_account_ratio_history': {
                 'time_col': 'time',
@@ -152,7 +148,7 @@ class DatabaseLoader:
             return pd.DataFrame()
 
     def load_all_tables(self) -> Dict[str, pd.DataFrame]:
-        """Load data from all 5 tables."""
+        """Load data from all 7 tables."""
         all_data = {}
 
         for table_name in self.tables.keys():
@@ -176,19 +172,6 @@ class DatabaseLoader:
         try:
             df.to_parquet(filepath, index=False)
             logger.info(f"Saved {len(df)} rows to {filepath}")
-
-            # Store to database if enabled
-            if self.enable_db_storage and self.db_storage:
-                try:
-                    stored_path = self.db_storage.store_file(
-                        filepath,
-                        table_name=table_name,
-                        feature_type='raw_data'
-                    )
-                    logger.info(f"File stored to database: {stored_path}")
-                except Exception as db_e:
-                    logger.warning(f"Failed to store to database: {db_e}")
-
         except Exception as e:
             logger.error(f"Error saving {table_name}: {e}")
 
@@ -202,6 +185,8 @@ class DatabaseLoader:
             'cg_spot_price_history': 'spot_price_history.csv',
             'cg_funding_rate_history': 'funding_rate_history.csv',
             'cg_futures_basis_history': 'futures_basis_history.csv',
+            'cg_spot_aggregated_taker_volume_history': 'taker_volume_history.csv',
+            'cg_spot_aggregated_ask_bids_history': 'ask_bids_history.csv',
             'cg_long_short_global_account_ratio_history': 'ls_global_ratio_history.csv',
             'cg_long_short_top_account_ratio_history': 'ls_top_ratio_history.csv'
         }
@@ -304,27 +289,8 @@ def main():
     data_filter = DataFilter(args)
     data_filter.print_filter_summary()
 
-    # Enable database storage based on environment variable
-    enable_db_storage = os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true'
-
     # Initialize database loader
-    loader = DatabaseLoader(data_filter, args.output_dir, enable_db_storage)
-
-    # Create training session if database storage is enabled
-    if enable_db_storage and loader.db_storage:
-        try:
-            session_id = loader.db_storage.create_training_session(
-                exchange_filter=data_filter.exchange_filter,
-                symbol_filter=data_filter.pair_filter or data_filter.symbol_filter,
-                interval_filter=data_filter.interval_filter,
-                time_range=data_filter.time_range,
-                days_filter=data_filter.days_filter,
-                notes="Data loading phase"
-            )
-            logger.info(f"Created training session: {session_id}")
-        except Exception as e:
-            logger.warning(f"Failed to create training session: {e}")
-            loader.db_storage = None  # Disable further DB operations
+    loader = DatabaseLoader(data_filter, args.output_dir)
 
     try:
         # Try to load from database first
@@ -347,32 +313,9 @@ def main():
                 loader.save_table_data(table_name, df)
 
             logger.info(f"\nAll data saved to {loader.output_dir}")
-
-            # Update session status
-            if loader.db_storage:
-                try:
-                    total_samples = sum(len(df) for df in all_data.values())
-                    loader.db_storage.update_session_status(
-                        status='data_loaded',
-                        metrics={'total_samples': total_samples}
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to update session status: {e}")
-
             logger.info("Ready for merge_7_tables.py")
         else:
             logger.error("No data could be loaded. Please check your database connection or CSV files.")
-
-            # Update session status to failed
-            if loader.db_storage:
-                try:
-                    loader.db_storage.update_session_status(
-                        status='failed',
-                        notes="Failed to load data"
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to update session status: {e}")
-
             sys.exit(1)
 
     except Exception as e:

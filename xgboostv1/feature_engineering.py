@@ -2,7 +2,6 @@
 """
 Feature engineering for 7 trading tables based on semantic nature of each dataset.
 Implements the specifications from feature_engineering.md for optimal XGBoost features.
-Enhanced with taker volume features from spot markets for improved prediction accuracy.
 """
 
 import pandas as pd
@@ -26,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class FeatureEngineer:
-    """Implement feature engineering based on table semantics (futures + selected spot data)."""
+    """Implement feature engineering based on table semantics."""
 
     def __init__(self, data_filter: DataFilter, output_dir: str = './output_train'):
         self.data_filter = data_filter
@@ -178,10 +177,33 @@ class FeatureEngineer:
 
         return df
 
-    # Removed: orderbook features (cg_spot_aggregated_ask_bids_history is spot data)
     def add_orderbook_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Placeholder - orderbook features removed (spot data)."""
-        logger.info("Skipping orderbook features (spot data not used)")
+        """Add features for cg_spot_aggregated_ask_bids_history."""
+        logger.info("Adding orderbook features...")
+
+        if 'orderbook_aggregated_bids_usd' not in df.columns:
+            logger.warning("Orderbook data not available")
+            return df
+
+        # Orderbook imbalance metrics
+        total_depth = df['orderbook_aggregated_bids_usd'] + df['orderbook_aggregated_asks_usd']
+        df['ob_imbalance'] = df['orderbook_aggregated_bids_usd'] / total_depth
+        df['depth_ratio'] = df['orderbook_aggregated_bids_quantity'] / df['orderbook_aggregated_asks_quantity']
+        df['quote_spread'] = df['orderbook_aggregated_asks_usd'] - df['orderbook_aggregated_bids_usd']
+
+        # Z-scores using transform to maintain index compatibility
+        bids_mean_12 = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_bids_usd'].transform(lambda x: x.rolling(12).mean())
+        bids_std_12 = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_bids_usd'].transform(lambda x: x.rolling(12).std())
+        asks_mean_12 = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_asks_usd'].transform(lambda x: x.rolling(12).mean())
+        asks_std_12 = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_asks_usd'].transform(lambda x: x.rolling(12).std())
+
+        df['bids_zscore'] = (df['orderbook_aggregated_bids_usd'] - bids_mean_12) / bids_std_12
+        df['asks_zscore'] = (df['orderbook_aggregated_asks_usd'] - asks_mean_12) / asks_std_12
+
+        self.feature_columns.extend([
+            'ob_imbalance', 'depth_ratio', 'quote_spread', 'bids_zscore', 'asks_zscore'
+        ])
+
         return df
 
     def add_longshort_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -241,19 +263,15 @@ class FeatureEngineer:
             df['cross_funding_price'] = df['funding_zscore'] * df['price_close_return_1']
             cross_features.append('cross_funding_price')
 
+        # Orderbook imbalance * price return
+        if 'ob_imbalance' in df.columns and 'price_close_return_1' in df.columns:
+            df['cross_ob_price'] = df['ob_imbalance'] * df['price_close_return_1']
+            cross_features.append('cross_ob_price')
+
         # Top vs global * price return
         if 'ls_top_vs_global' in df.columns and 'price_close_return_1' in df.columns:
             df['cross_ls_price'] = df['ls_top_vs_global'] * df['price_close_return_1']
             cross_features.append('cross_ls_price')
-
-        # Additional cross features with taker volume
-        if 'taker_buy_ratio' in df.columns and 'price_close_return_1' in df.columns:
-            df['cross_taker_price'] = df['taker_buy_ratio'] * df['price_close_return_1']
-            cross_features.append('cross_taker_price')
-
-        if 'taker_imbalance' in df.columns and 'funding_zscore' in df.columns:
-            df['cross_taker_funding'] = df['taker_imbalance'] * df['funding_zscore']
-            cross_features.append('cross_taker_funding')
 
         self.feature_columns.extend(cross_features)
         logger.info(f"Added {len(cross_features)} cross-table features")
@@ -351,67 +369,6 @@ class FeatureEngineer:
         features_file = self.output_dir / 'features_only.parquet'
         features_df.to_parquet(features_file, index=False)
         logger.info(f"Features-only dataset saved to {features_file}")
-
-        # Save engineered features to database if enabled
-        if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
-            try:
-                from database_storage import DatabaseStorage
-                import pymysql
-                from dotenv import load_dotenv
-                load_dotenv()
-
-                conn = pymysql.connect(
-                    host=os.getenv('DB_HOST', '103.150.81.86'),
-                    port=int(os.getenv('DB_PORT', 3306)),
-                    database=os.getenv('DB_NAME', 'xgboostqc'),
-                    user=os.getenv('DB_USER', 'xgboostqc'),
-                    password=os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
-                )
-                cursor = conn.cursor()
-
-                cursor.execute(
-                    "SELECT session_id FROM xgboost_training_sessions "
-                    "WHERE status = 'data_loaded' ORDER BY created_at DESC LIMIT 1"
-                )
-                result = cursor.fetchone()
-                conn.close()
-
-                if result:
-                    session_id = result[0]
-
-                    # Store feature data sample
-                    sample_df = df.head(100)  # First 100 rows
-                    db_storage = DatabaseStorage()
-                    db_storage.store_feature_data(
-                        session_id=session_id,
-                        feature_type='engineered_features',
-                        data=sample_df,
-                        description=f"Engineered features from {len(feature_cols)} features, {len(df)} total rows, showing sample of 100"
-                    )
-                    logger.info(f"Stored engineered features sample to database for session: {session_id}")
-
-                    # Store feature schema
-                    schema_info = {
-                        'total_features': len(feature_cols),
-                        'feature_list': feature_cols,
-                        'feature_categories': {
-                            'price_features': [f for f in feature_cols if f.startswith('price_')],
-                            'funding_features': [f for f in feature_cols if f.startswith('funding_')],
-                            'basis_features': [f for f in feature_cols if f.startswith('basis_')],
-                            'ls_features': [f for f in feature_cols if f.startswith('ls_')],
-                            'cross_features': [f for f in feature_cols if f.startswith('cross_')]
-                        }
-                    }
-                    db_storage.store_feature_data(
-                        session_id=session_id,
-                        feature_type='feature_schema',
-                        data=pd.DataFrame([schema_info]),
-                        description="Feature engineering schema and metadata"
-                    )
-                    logger.info(f"Stored feature schema to database")
-
-            except Exception as e:
-                logger.warning(f"Failed to save engineered features to database: {e}")
 
 def main():
     """Main function to engineer features."""
