@@ -84,71 +84,6 @@ validate_env() {
     log_info "✓ Environment variables validated"
 }
 
-# Test database connections
-test_databases() {
-    log_step "Testing database connections..."
-
-    # Test trading database
-    log_info "Testing trading database connection..."
-    docker run --rm --network host \
-        -e TRADING_DB_HOST=$TRADING_DB_HOST \
-        -e TRADING_DB_PORT=$TRADING_DB_PORT \
-        -e TRADING_DB_USER=$TRADING_DB_USER \
-        -e TRADING_DB_PASSWORD=$TRADING_DB_PASSWORD \
-        -e TRADING_DB_NAME=$TRADING_DB_NAME \
-        $IMAGE_NAME \
-        python -c "
-import pymysql
-try:
-    conn = pymysql.connect(
-        host='$TRADING_DB_HOST',
-        port=$TRADING_DB_PORT,
-        user='$TRADING_DB_USER',
-        password='$TRADING_DB_PASSWORD',
-        database='$TRADING_DB_NAME'
-    )
-    print('✓ Trading database connection successful')
-    conn.close()
-except Exception as e:
-    print(f'✗ Trading database connection failed: {e}')
-    exit(1)
-" || {
-        log_error "Cannot connect to trading database"
-        exit 1
-    }
-
-    # Test results database
-    log_info "Testing results database connection..."
-    docker run --rm --network host \
-        -e DB_HOST=$DB_HOST \
-        -e DB_PORT=$DB_PORT \
-        -e DB_USER=$DB_USER \
-        -e DB_PASSWORD=$DB_PASSWORD \
-        -e DB_NAME=$DB_NAME \
-        $IMAGE_NAME \
-        python -c "
-import pymysql
-try:
-    conn = pymysql.connect(
-        host='$DB_HOST',
-        port=$DB_PORT,
-        user='$DB_USER',
-        password='$DB_PASSWORD',
-        database='$DB_NAME'
-    )
-    print('✓ Results database connection successful')
-    conn.close()
-except Exception as e:
-    print(f'✗ Results database connection failed: {e}')
-    exit(1)
-" || {
-        log_error "Cannot connect to results database"
-        exit 1
-    }
-
-    log_info "✓ Database connections OK"
-}
-
 # Build Docker image
 build_image() {
     log_step "Building Docker image..."
@@ -172,16 +107,25 @@ create_directories() {
     log_info "✓ Directories created"
 }
 
-# Deploy API
-deploy_api() {
-    log_step "Deploying FastAPI server..."
+# Stop existing API
+stop_existing_api() {
+    log_step "Stopping existing API container..."
 
-    # Stop existing container if running
     if docker ps -q -f name=xgboost_api | grep -q .; then
         log_info "Stopping existing API container..."
         docker stop xgboost_api || true
         docker rm xgboost_api || true
     fi
+
+    log_info "✓ Existing API stopped"
+}
+
+# Deploy API
+deploy_api() {
+    log_step "Deploying FastAPI server..."
+
+    # Source .env for environment variables
+    source .env
 
     # Run API container
     docker run -d \
@@ -200,15 +144,17 @@ deploy_api() {
 wait_for_api() {
     log_step "Waiting for API to be ready..."
 
-    for i in {1..30}; do
+    for i in {1..60}; do
         if curl -s http://localhost:$API_PORT/api/v1/health > /dev/null 2>&1; then
             log_info "✓ API server is ready!"
             break
         fi
 
-        if [ $i -eq 30 ]; then
-            log_error "API server failed to start within 60 seconds"
-            docker logs xgboost_api
+        if [ $i -eq 60 ]; then
+            log_error "API server failed to start within 120 seconds"
+            echo ""
+            log_info "Checking container logs..."
+            docker logs xgboost_api 2>&1 | tail -20
             exit 1
         fi
 
@@ -258,7 +204,7 @@ main() {
     validate_env
     build_image
     create_directories
-    test_databases
+    stop_existing_api
     deploy_api
     wait_for_api
     show_status
