@@ -171,13 +171,15 @@ class CSVStorage:
 
     def save_all_csv_outputs(self, output_dir: Path, session_id: str, model_name: str):
         """Save all CSV outputs from a training session"""
-        logger.info("Saving CSV outputs to database...")
+        logger.info(f"Saving CSV outputs to database for session {session_id}...")
 
-        # Save feature importance
+        # Save feature importance (any feature importance file)
         feature_files = list(output_dir.glob("feature_importance_*.csv"))
-        for feature_file in feature_files:
-            if session_id in feature_file.name:
-                self.save_feature_importance(feature_file, session_id, model_name)
+        if feature_files:
+            # Use the latest feature importance file
+            latest_feature_file = max(feature_files, key=lambda x: x.stat().st_mtime)
+            self.save_feature_importance(latest_feature_file, session_id, model_name)
+            logger.info(f"Saved feature importance from {latest_feature_file.name}")
 
         # Save trades summary
         trades_file = output_dir / "trades.csv"
