@@ -1,6 +1,6 @@
 {
-  "model_name": "xgboost_trading_model_20251216_094104.joblib",
-  "timestamp": "20251216_094104",
+  "model_name": "xgboost_trading_model_20251216_180451.joblib",
+  "timestamp": "20251216_180451",
   "parameters": {
     "objective": "binary:logistic",
     "eval_metric": [
