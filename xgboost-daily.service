@@ -9,7 +9,7 @@ User=root
 Group=root
 WorkingDirectory=/www/wwwroot/xgboost-qcv2
 Environment=PYTHONPATH=/www/wwwroot/xgboost-qcv2
-ExecStart=/usr/bin/python3 /www/wwwroot/xgboost-qcv2/daily_runner.py
+ExecStart=/usr/bin/python3 /www/wwwroot/xgboost-qcv2/multi_day_runner.py --days 1
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=xgboost-daily

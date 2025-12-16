@@ -19,7 +19,7 @@ import pymysql
 from sqlalchemy import create_engine, text, Column, String, DateTime, Integer, Float, Text, LargeBinary, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.dialects.mysql import MEDIUMBLOB, LONGTEXT
+from sqlalchemy.dialects.mysql import MEDIUMBLOB, LONGTEXT, LONGBLOB
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -80,7 +80,7 @@ class ModelStorage(Base):
     is_latest = Column(Boolean, default=False)
 
     # Model serialization (using BLOB)
-    model_data = Column(LargeBinary)  # pickled model
+    model_data = Column(LONGBLOB)  # pickled model
 
     # Model metadata
     feature_names = Column(Text)  # JSON list

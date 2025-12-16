@@ -574,6 +574,50 @@ class ModelEvaluator:
         logger.info(f"Saved report to {report_file}")
         logger.info(f"Saved trading results to {results_file}")
 
+        # Save to database if enabled
+        if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
+            self.save_evaluation_to_database(metrics, report, timestamp)
+
+    def save_evaluation_to_database(self, metrics: dict, report: dict, timestamp: str):
+        """Save evaluation results to xgboostqc database."""
+        try:
+            from database_storage import DatabaseStorage
+
+            # Use xgboostqc database config
+            db_storage = DatabaseStorage(
+                db_config={
+                    'host': os.getenv('DB_HOST', '103.150.81.86'),
+                    'port': int(os.getenv('DB_PORT', 3306)),
+                    'database': os.getenv('DB_NAME', 'xgboostqc'),
+                    'user': os.getenv('DB_USER', 'xgboostqc'),
+                    'password': os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
+                }
+            )
+
+            # Get model info
+            model_path = self.output_dir / "latest_model.joblib"
+            model_name = os.path.basename(model_path) if model_path.exists() else "unknown_model"
+
+            # Store evaluation results
+            db_storage.store_evaluation_results(
+                eval_type='trading_performance',
+                metrics=metrics,
+                eval_params={
+                    'model_name': model_name,
+                    'initial_cash': float(os.getenv('INITIAL_CASH', 1000)),
+                    'leverage': float(os.getenv('LEVERAGE', 10)),
+                    'margin_fraction': float(os.getenv('MARGIN_FRACTION', 0.2)),
+                    'fee_rate': float(os.getenv('FEE_RATE', 0.0004)),
+                    'threshold': float(os.getenv('THRESHOLD', 0.5))
+                },
+                detailed_results=report
+            )
+
+            logger.info("Evaluation results saved to database")
+
+        except Exception as e:
+            logger.warning(f"Failed to save evaluation to database: {e}")
+
 
 def main():
     args = parse_arguments()

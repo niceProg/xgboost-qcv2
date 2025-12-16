@@ -283,6 +283,43 @@ class XGBoostTrainer:
                 f.write(f"{feature}\n")
         logger.info(f"Feature list saved to {features_path}")
 
+        # Also save to database if enabled
+        if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
+            self.save_to_database(model, model_name, results)
+
+    def save_to_database(self, model: xgb.XGBClassifier, model_name: str, results: dict):
+        """Save model and results to xgboostqc database."""
+        try:
+            from database_storage import DatabaseStorage
+
+            # Use xgboostqc database config
+            db_storage = DatabaseStorage(
+                db_config={
+                    'host': os.getenv('DB_HOST', '103.150.81.86'),
+                    'port': int(os.getenv('DB_PORT', 3306)),
+                    'database': os.getenv('DB_NAME', 'xgboostqc'),
+                    'user': os.getenv('DB_USER', 'xgboostqc'),
+                    'password': os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
+                }
+            )
+
+            # Store model
+            db_storage.store_model(
+                model=model,
+                model_name=model_name,
+                feature_names=self.feature_names if hasattr(self, 'feature_names') else [],
+                hyperparams=results['parameters'],
+                train_score=results['metrics'].get('train_auc', 0),
+                val_score=results['metrics'].get('val_auc', 0),
+                cv_scores=results['cross_validation'].get('cv_scores', []),
+                is_latest=True
+            )
+
+            logger.info("Model saved to database")
+
+        except Exception as e:
+            logger.warning(f"Failed to save model to database: {e}")
+
     def hyperparameter_tuning(self, X_train: pd.DataFrame, y_train: pd.Series,
                             X_val: pd.DataFrame, y_val: pd.Series) -> dict:
         """Basic hyperparameter tuning."""

@@ -7,6 +7,7 @@ Provides filtering capabilities for exchange, pair, interval, time, and days.
 import argparse
 from typing import Optional, List
 import sys
+from datetime import datetime, timedelta
 
 def parse_arguments():
     """Parse command-line arguments for the XGBoost pipeline."""
@@ -61,28 +62,13 @@ Examples:
         help='Number of recent days to include'
     )
 
-    # Trading hours window (for daily trading)
-    parser.add_argument(
-        '--trading-hours',
-        type=str,
-        default='7:00-16:00',
-        help='Trading hours window in HH:MM-HH:MM format (default: 7:00-16:00)'
-    )
-
-    # Time zone
-    parser.add_argument(
-        '--timezone',
-        type=str,
-        default='UTC',
-        help='Timezone for time calculations (default: UTC)'
-    )
-
+    
     # Mode selection
     parser.add_argument(
         '--mode',
         type=str,
         choices=['initial', 'daily'],
-        default='daily',
+        default='initial',
         help='Training mode: initial (historical from 2024) or daily (current day only)'
     )
 
@@ -113,87 +99,26 @@ class DataFilter:
         self.interval_filter = self._parse_comma_list(args.interval) if args.interval else None
         self.time_range = self._parse_time_range(args.time) if args.time else None
         self.days_filter = args.days
-
-        # Parse trading hours
-        self.trading_hours = self._parse_trading_hours(args.trading_hours)
-        self.timezone = args.timezone
         self.mode = args.mode
 
     def _parse_comma_list(self, comma_str: str) -> List[str]:
         """Parse comma-separated list into list of strings."""
         return [item.strip() for item in comma_str.split(',') if item.strip()]
 
-    def _parse_trading_hours(self, hours_str: str) -> tuple:
-        """Parse trading hours string into (start_hour, start_min, end_hour, end_min) tuple."""
-        try:
-            start_str, end_str = hours_str.split('-')
-            start_hour, start_min = map(int, start_str.strip().split(':'))
-            end_hour, end_min = map(int, end_str.strip().split(':'))
-            return (start_hour, start_min, end_hour, end_min)
-        except:
-            print(f"Error parsing trading hours: {hours_str}")
-            print("Expected format: HH:MM-HH:MM (e.g., 7:00-16:00)")
-            sys.exit(1)
-
-    def get_trading_time_range(self, date=None):
-        """Get time range for current trading session."""
-        import datetime
-        import pytz
-
-        # Get timezone (WIB is UTC+7)
-        if self.timezone == 'WIB':
-            tz = pytz.timezone('Asia/Jakarta')
-        elif self.timezone == 'UTC':
-            tz = datetime.timezone.utc
-        else:
-            tz = pytz.timezone(self.timezone) if self.timezone else datetime.timezone.utc
-
-        # Use provided date or today
-        if date:
-            target_date = datetime.datetime.strptime(date, '%Y-%m-%d').date()
-        else:
-            target_date = datetime.datetime.now(tz).date()
-
-        # Create datetime objects for start and end
-        start_hour, start_min, end_hour, end_min = self.trading_hours
-        start_dt = datetime.datetime.combine(
-            target_date,
-            datetime.time(start_hour, start_min, 0)
-        )
-        end_dt = datetime.datetime.combine(
-            target_date,
-            datetime.time(end_hour, end_min, 0)
-        )
-
-        # Localize to timezone
-        if self.timezone != 'UTC':
-            local_tz = pytz.timezone(self.timezone)
-            start_dt = local_tz.localize(start_dt)
-            end_dt = local_tz.localize(end_dt)
-
-        # Convert to UTC timestamp (milliseconds)
-        start_timestamp = int(start_dt.timestamp() * 1000)
-        end_timestamp = int(end_dt.timestamp() * 1000)
-
-        return (start_timestamp, end_timestamp)
-
+  
     def get_daily_time_filter(self):
         """Get time filter for daily mode."""
         if self.mode == 'daily':
-            start_time, end_time = self.get_trading_time_range()
-            return (start_time, end_time)
+            # For daily mode, load data from start of day
+            import datetime
+            today_start = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_end = datetime.datetime.now()
+            return (int(today_start.timestamp() * 1000), int(today_end.timestamp() * 1000))
         elif self.mode == 'initial':
             # For initial mode, load data from 2024 onwards
             import datetime
-            # Use WIB timezone if specified
-            if self.timezone == 'WIB':
-                import pytz
-                tz = pytz.timezone('Asia/Jakarta')
-                start_dt = tz.localize(datetime.datetime(2024, 1, 1))
-                end_dt = datetime.datetime.now(tz)
-            else:
-                start_dt = datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
-                end_dt = datetime.datetime.now(datetime.timezone.utc)
+            start_dt = datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
+            end_dt = datetime.datetime.now(datetime.timezone.utc)
             return (int(start_dt.timestamp() * 1000), int(end_dt.timestamp() * 1000))
         return None
 
@@ -327,11 +252,6 @@ class DataFilter:
             print(f"Symbol(s): {', '.join(self.symbol_filter)}")
         if self.interval_filter:
             print(f"Interval(s): {', '.join(self.interval_filter)}")
-        if self.trading_hours:
-            start_hour, start_min, end_hour, end_min = self.trading_hours
-            print(f"Trading Hours: {start_hour:02d}:{start_min:02d} - {end_hour:02d}:{end_min:02d}")
-        if self.timezone:
-            print(f"Timezone: {self.timezone}")
 
         # Show time range based on mode
         time_range = self.get_daily_time_filter()

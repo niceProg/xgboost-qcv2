@@ -1,21 +1,26 @@
 #!/bin/bash
 
-# Simple script untuk menjalankan pipeline XGBoost step by step
+# Simple script untuk menjalankan daily pipeline XGBoost
+# Mode: Daily (hanya hari ini)
+# Timezone: WIB
+# Trading Hours: 7:00-16:00
 
 echo "========================================"
-echo "XGBoost Trading Pipeline - Manual Run"
+echo "XGBoost Daily Trading Pipeline"
 echo "========================================"
 
 # Default parameters
 EXCHANGE=${EXCHANGE:-binance}
 PAIR=${PAIR:-BTCUSDT}
 INTERVAL=${INTERVAL:-1h}
+MODE=${MODE:-daily}
 OUTPUT_DIR=${OUTPUT_DIR:-./output_train}
 
 echo "Configuration:"
 echo "  Exchange: $EXCHANGE"
 echo "  Pair: $PAIR"
 echo "  Interval: $INTERVAL"
+echo "  Mode: $MODE"
 echo "  Output Directory: $OUTPUT_DIR"
 echo ""
 
@@ -29,13 +34,14 @@ run_step() {
 
     echo "=========================================="
     echo "Running $step_name..."
-    echo "Command: python $script --exchange $EXCHANGE --pair $PAIR --interval $INTERVAL"
+    echo "Command: python $script --exchange $EXCHANGE --pair $PAIR --interval $INTERVAL --mode $MODE"
     echo "=========================================="
 
     if python "$script" \
         --exchange "$EXCHANGE" \
         --pair "$PAIR" \
         --interval "$INTERVAL" \
+        --mode "$MODE" \
         --output-dir "$OUTPUT_DIR"; then
         echo "✅ $step_name completed successfully"
         echo ""
@@ -55,7 +61,7 @@ run_step "xgboost_trainer.py" "Step 5: Model Training"
 run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation"
 
 echo "=========================================="
-echo "✅ Pipeline completed successfully!"
+echo "✅ Daily Pipeline completed successfully!"
 echo "=========================================="
 
 # Show output directory contents
@@ -69,7 +75,4 @@ echo "Trained models:"
 ls -la "$OUTPUT_DIR"/*.joblib 2>/dev/null || echo "No model files found"
 
 echo ""
-echo "Next steps:"
-echo "1. Start API server: python api_server.py"
-echo "2. Access API at: http://localhost:8000/api/v1/"
-echo "3. View results: ls -la $OUTPUT_DIR"
+echo "Daily run completed at: $(date)"
