@@ -111,7 +111,7 @@ class RealtimeTrainerPipeline:
         ]
 
         # Change to parent directory where core scripts are located
-        parent_dir = Path(__file__).parent.parent
+        parent_dir = Path(__file__).parent.parent.absolute()  # Get absolute path
         original_cwd = os.getcwd()
 
         try:
@@ -120,20 +120,26 @@ class RealtimeTrainerPipeline:
             for step_num, (script, description) in enumerate(core_scripts, 1):
                 logger.info(f"🔧 Step {step_num}: {description}")
 
-                # Build command with absolute paths
+                # Build command - scripts are now in parent directory
                 cmd = [
-                    "python3", str(Path(parent_dir) / script),
+                    "python3", script,
                     "--exchange", exchange,
                     "--pair", pair,
                     "--interval", interval,
                     "--output-dir", str(self.output_dir.absolute())
                 ]
 
+                logger.info(f"🏃 Running: {' '.join(cmd)}")
+                logger.info(f"📍 Working directory: {os.getcwd()}")
+                logger.info(f"📄 Script path: {script}")
+                logger.info(f"📁 Script exists: {Path(script).exists()}")
+
                 # Add incremental mode for specific scripts
                 if incremental and script in ['load_database.py', 'xgboost_trainer.py']:
                     cmd.extend(["--incremental"])
+                    logger.info(f"🔄 Added incremental flag")
 
-                logger.info(f"🏃 Running: {' '.join(cmd)}")
+                logger.info(f"🏃 Final command: {' '.join(cmd)}")
 
                 # Execute core script
                 result = subprocess.run(
