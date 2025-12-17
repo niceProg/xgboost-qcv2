@@ -336,7 +336,18 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements (using existing requirements.txt for consistency)
 COPY requirements.container.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Upgrade pip and install requirements with verbose output for debugging
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt -v && \
+    echo "✅ Verifying critical dependencies..." && \
+    python3 -c "import sqlalchemy; print('✅ SQLAlchemy:', sqlalchemy.__version__)" && \
+    python3 -c "import pymysql; print('✅ PyMySQL installed')" && \
+    python3 -c "import pandas; print('✅ Pandas:', pandas.__version__)" && \
+    python3 -c "import xgboost; print('✅ XGBoost:', xgboost.__version__)" && \
+    python3 -c "import pytz; print('✅ PyTZ available')" && \
+    python3 -c "from dotenv import load_dotenv; print('✅ python-dotenv available')" && \
+    echo "✅ All critical dependencies verified"
 
 # Copy API code
 COPY structured_api.py .
@@ -379,7 +390,18 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements (using existing requirements.txt for consistency)
 COPY requirements.container.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Upgrade pip and install requirements with verbose output for debugging
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt -v && \
+    echo "✅ Verifying critical dependencies..." && \
+    python3 -c "import sqlalchemy; print('✅ SQLAlchemy:', sqlalchemy.__version__)" && \
+    python3 -c "import pymysql; print('✅ PyMySQL installed')" && \
+    python3 -c "import pandas; print('✅ Pandas:', pandas.__version__)" && \
+    python3 -c "import xgboost; print('✅ XGBoost:', xgboost.__version__)" && \
+    python3 -c "import pytz; print('✅ PyTZ available')" && \
+    python3 -c "from dotenv import load_dotenv; print('✅ python-dotenv available')" && \
+    echo "✅ All critical dependencies verified"
 
 # Copy monitor and supporting files - FIX: Missing database_storage
 COPY realtime_monitor.py .
@@ -412,7 +434,18 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements (using existing requirements.txt for consistency)
 COPY requirements.container.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Upgrade pip and install requirements with verbose output for debugging
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt -v && \
+    echo "✅ Verifying critical dependencies..." && \
+    python3 -c "import sqlalchemy; print('✅ SQLAlchemy:', sqlalchemy.__version__)" && \
+    python3 -c "import pymysql; print('✅ PyMySQL installed')" && \
+    python3 -c "import pandas; print('✅ Pandas:', pandas.__version__)" && \
+    python3 -c "import xgboost; print('✅ XGBoost:', xgboost.__version__)" && \
+    python3 -c "import pytz; print('✅ PyTZ available')" && \
+    python3 -c "from dotenv import load_dotenv; print('✅ python-dotenv available')" && \
+    echo "✅ All critical dependencies verified"
 
 # Copy ALL core training files - FIX: Missing files error
 COPY realtime_trainer_pipeline.py .
@@ -432,6 +465,16 @@ RUN mkdir -p /var/log
 # Set timezone for consistency
 ENV TZ=Asia/Jakarta
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Verify core files can import their dependencies
+RUN echo "🔍 Verifying core file imports..." && \
+    python3 -c "import load_database; print('✅ load_database.py imports OK')" && \
+    python3 -c "import merge_7_tables; print('✅ merge_7_tables.py imports OK')" && \
+    python3 -c "import feature_engineering; print('✅ feature_engineering.py imports OK')" && \
+    python3 -c "import label_builder; print('✅ label_builder.py imports OK')" && \
+    python3 -c "import xgboost_trainer; print('✅ xgboost_trainer.py imports OK')" && \
+    python3 -c "import model_evaluation_with_leverage; print('✅ model_evaluation_with_leverage.py imports OK')" && \
+    echo "✅ All core files verified successfully"
 
 # Run trainer (will be triggered by monitor)
 CMD ["python", "realtime_trainer_pipeline.py", "--mode", "incremental"]

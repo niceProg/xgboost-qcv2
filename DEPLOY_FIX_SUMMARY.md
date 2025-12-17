@@ -103,6 +103,32 @@ docker-compose up -d
 rm -f requirements.container.txt  # ✅ Safe cleanup
 ```
 
+### 7. ✅ **Fixed Dependency Installation & Verification**
+**Problem**: SQLAlchemy dan dependencies critical tidak terinstall dengan benar di container
+```
+❌ ModuleNotFoundError: No module named 'sqlalchemy'
+```
+
+**Solution**: Comprehensive dependency verification dan debugging
+```dockerfile
+# FIXED: Upgrade pip and verify ALL dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt -v && \
+    echo "✅ Verifying critical dependencies..." && \
+    python3 -c "import sqlalchemy; print('✅ SQLAlchemy:', sqlalchemy.__version__)" && \
+    python3 -c "import pymysql; print('✅ PyMySQL installed')" && \
+    python3 -c "import pandas; print('✅ Pandas:', pandas.__version__)" && \
+    python3 -c "import xgboost; print('✅ XGBoost:', xgboost.__version__)" && \
+    python3 -c "import pytz; print('✅ PyTZ available')" && \
+    python3 -c "from dotenv import load_dotenv; print('✅ python-dotenv available')" && \
+    echo "✅ All critical dependencies verified"
+
+# Verify core files can import their dependencies
+RUN python3 -c "import load_database; print('✅ load_database.py imports OK')" && \
+    python3 -c "import merge_7_tables; print('✅ merge_7_tables.py imports OK')" && \
+    echo "✅ All core files verified successfully"
+```
+
 ## 📊 Container Architecture - FIXED:
 
 ```
@@ -180,6 +206,6 @@ curl http://localhost:8000/training/status
 
 ---
 *Generated: 2025-12-18*
-*Fixed Issues: 6/6*
+*Fixed Issues: 7/7*
 *Status: ✅ Ready for Docker Deployment*
-*Last Fix: Docker build dependencies timing*
+*Last Fix: SQLAlchemy dependency verification & debugging*
