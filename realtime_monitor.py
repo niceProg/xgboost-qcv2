@@ -182,25 +182,9 @@ class RealtimeDatabaseMonitor:
             return config['max_check_interval']  # Low priority: as configured
 
     def should_check_table_now(self, table: str) -> bool:
-        """Smart logic to determine if table needs checking right now."""
-        config = self.table_configs[table]
-        activity = self.table_activity[table]
-
-        # Check if enough time has passed since last check
-        last_check = activity.get('last_check', datetime.min)
-        adaptive_interval = self.get_adaptive_check_interval(table)
-
-        time_since_check = (datetime.now() - last_check).total_seconds()
-
-        if time_since_check < adaptive_interval:
-            return False
-
-        # Additional smart checks
-        # Check for urgent conditions (override interval)
-        if self.check_urgent_conditions(table):
-            logger.info(f"🚨 Urgent condition detected for {table}")
-            return True
-
+        """Simplified logic - always check all tables for real-time monitoring."""
+        # For real-time monitoring, always check all tables
+        # Disable adaptive checking to ensure we don't miss data
         return True
 
     def check_urgent_conditions(self, table: str) -> bool:
