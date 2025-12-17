@@ -305,6 +305,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
@@ -334,6 +335,11 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -357,6 +363,9 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
+    build-essential \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
@@ -394,11 +403,12 @@ python-multipart==0.0.6
 aiofiles==23.2.1
 
 # Core Pipeline Dependencies
-ta-lib==0.4.28
 matplotlib==3.7.2
 seaborn==0.12.2
 plotly==5.17.0
 tqdm==4.66.1
+yfinance==0.2.28
+ta==0.10.2  # Alternative to ta-lib, pure Python
 EOF
 
 print_status "✅ Dockerfiles and requirements created"
