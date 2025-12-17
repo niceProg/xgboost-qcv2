@@ -1,13 +1,13 @@
 {
-  "timestamp": "2025-12-17T18:44:33.618741",
+  "timestamp": "2025-12-17T18:52:29.454937",
   "trigger_reason": "new_data_arrival",
   "new_data_summary": {
-    "cg_spot_price_history": 49,
-    "cg_funding_rate_history": 50,
-    "cg_futures_basis_history": 294,
-    "cg_spot_aggregated_taker_volume_history": 300,
-    "cg_long_short_global_account_ratio_history": 50,
-    "cg_long_short_top_account_ratio_history": 49
+    "cg_spot_price_history": 14,
+    "cg_funding_rate_history": 14,
+    "cg_futures_basis_history": 86,
+    "cg_spot_aggregated_taker_volume_history": 81,
+    "cg_long_short_global_account_ratio_history": 14,
+    "cg_long_short_top_account_ratio_history": 15
   },
   "tables_with_new_data": [
     "cg_spot_price_history",

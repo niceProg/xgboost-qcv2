@@ -522,8 +522,7 @@ class RealtimeDatabaseMonitor:
             tables_with_data = list(set([data['table'] for data in new_data_list]))
             readable_tables = ', '.join([table_names.get(table, table) for table in tables_with_data])
 
-            message = f"""
-📊 New 2025 Data Detected!
+            message = f"""📊 New 2025 Data Detected!
 
 📈 Total New Records: {total_records:,}
 📊 Tables: {readable_tables}
@@ -536,10 +535,9 @@ Performance: Check ./logs/ for detailed metrics
 
 Table Breakdown:
 """ + '\n'.join([f"• {table_names.get(data['table'], data['table'])}: {data['new_count']:,} records ({data.get('priority', 'UNKNOWN')})"
-                 for data in new_data_list])
+                 for data in new_data_list]) + f"""
 
-🤖 XGBoost Real-time Monitor
-            """
+🤖 XGBoost Real-time Monitor"""
 
             # Send Telegram notification if configured
             telegram_token = self.config['notification']['telegram_token']
