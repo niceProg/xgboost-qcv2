@@ -61,68 +61,68 @@ class RealtimeDatabaseMonitor:
         self.config = self.load_config()
         self.state = self.load_state()
 
-        # Smart table configurations - based on created_at
+        # Smart table configurations - based on time column for real-time detection
         self.table_configs = {
             'cg_spot_price_history': {
                 'time_col': 'time',
-                'created_col': 'created_at',  # Smart check using created_at
                 'key_cols': ['time', 'exchange', 'symbol', 'interval'],
-                'min_new_records': 10,
-                'priority': 'HIGH',  # High priority table
-                'max_check_interval': 60,  # Max 60 seconds
-                'urgent_threshold': 50,   # Trigger immediate if >50 records
-                'business_hours_only': False
+                'min_new_records': 5,    # Lower threshold for real-time
+                'priority': 'HIGH',
+                'max_check_interval': 30,  # Check every 30 seconds
+                'urgent_threshold': 20,   # Trigger immediate if >20 records
+                'business_hours_only': False,
+                'realtime_window': 300    # Check last 5 minutes for new data
             },
             'cg_funding_rate_history': {
                 'time_col': 'time',
-                'created_col': 'created_at',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 5,
+                'min_new_records': 3,
                 'priority': 'MEDIUM',
-                'max_check_interval': 300,  # Max 5 minutes
-                'urgent_threshold': 20,
-                'business_hours_only': False
+                'max_check_interval': 60,  # Check every minute
+                'urgent_threshold': 10,
+                'business_hours_only': False,
+                'realtime_window': 600    # Check last 10 minutes
             },
             'cg_futures_basis_history': {
                 'time_col': 'time',
-                'created_col': 'created_at',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 5,
+                'min_new_records': 3,
                 'priority': 'MEDIUM',
-                'max_check_interval': 300,
-                'urgent_threshold': 20,
-                'business_hours_only': False
+                'max_check_interval': 60,
+                'urgent_threshold': 10,
+                'business_hours_only': False,
+                'realtime_window': 600
             },
             'cg_spot_aggregated_taker_volume_history': {
                 'time_col': 'time',
-                'created_col': 'created_at',
                 'key_cols': ['time', 'exchange_name', 'symbol', 'interval'],
-                'exchange_col': 'exchange_name',  # Specify exchange column name
-                'min_new_records': 10,
+                'exchange_col': 'exchange_name',
+                'min_new_records': 5,
                 'priority': 'HIGH',
-                'max_check_interval': 60,
-                'urgent_threshold': 50,
-                'business_hours_only': False
+                'max_check_interval': 30,  # High volume - check every 30 seconds
+                'urgent_threshold': 20,
+                'business_hours_only': False,
+                'realtime_window': 300    # Check last 5 minutes
             },
             'cg_long_short_global_account_ratio_history': {
                 'time_col': 'time',
-                'created_col': 'created_at',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
                 'min_new_records': 2,
                 'priority': 'LOW',
-                'max_check_interval': 600,  # Max 10 minutes
-                'urgent_threshold': 10,
-                'business_hours_only': True  # Only during active trading hours
+                'max_check_interval': 120,  # Check every 2 minutes
+                'urgent_threshold': 5,
+                'business_hours_only': True,
+                'realtime_window': 900     # Check last 15 minutes
             },
             'cg_long_short_top_account_ratio_history': {
                 'time_col': 'time',
-                'created_col': 'created_at',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
                 'min_new_records': 2,
                 'priority': 'LOW',
-                'max_check_interval': 600,
-                'urgent_threshold': 10,
-                'business_hours_only': True
+                'max_check_interval': 120,
+                'urgent_threshold': 5,
+                'business_hours_only': True,
+                'realtime_window': 900
             }
         }
 
@@ -165,21 +165,13 @@ class RealtimeDatabaseMonitor:
         if config['business_hours_only'] and not self.is_business_hours():
             return config['max_check_interval'] * 2  # Double interval outside business hours
 
-        # Adaptive logic based on recent activity
-        if activity['last_data_found']:
-            time_since_data = (datetime.now() - activity['last_data_found']).total_seconds()
-
-            # If data was found recently, check more frequently
-            if time_since_data < 300:  # Last 5 minutes
-                return min(30, config['max_check_interval'])  # Check every 30 seconds
-            elif time_since_data < 1800:  # Last 30 minutes
-                return min(60, config['max_check_interval'])  # Check every minute
-            elif time_since_data < 3600:  # Last hour
-                return config['max_check_interval'] // 2  # Half the max interval
-            else:
-                return config['max_check_interval']  # Full interval for inactive tables
-
-        return config['max_check_interval']
+        # Real-time adaptive logic - always check frequently for active tables
+        if config['priority'] == 'HIGH':
+            return min(config['max_check_interval'], 30)  # High priority: max 30 seconds
+        elif config['priority'] == 'MEDIUM':
+            return min(config['max_check_interval'], 60)  # Medium priority: max 1 minute
+        else:
+            return config['max_check_interval']  # Low priority: as configured
 
     def should_check_table_now(self, table: str) -> bool:
         """Smart logic to determine if table needs checking right now."""
@@ -213,14 +205,12 @@ class RealtimeDatabaseMonitor:
             cursor = self.connection.cursor()
             config = self.table_configs[table]
 
-            # Quick check for recent high-volume data (MariaDB compatible)
+            # Quick check for recent high-volume data using time column
             exchange_col = config.get('exchange_col', 'exchange')  # Default to 'exchange'
             urgent_query = f"""
-            SELECT COUNT(*) as recent_count,
-                   MAX({config['created_col']}) as latest_created,
-                   TIMESTAMPDIFF(SECOND, MAX({config['created_col']}), NOW()) as seconds_ago
+            SELECT COUNT(*) as recent_count
             FROM {table}
-            WHERE {config['created_col']} >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+            WHERE {config['time_col']} > UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 2 MINUTE)) * 1000
             AND `{exchange_col}` IN %s
             """
 
@@ -228,7 +218,7 @@ class RealtimeDatabaseMonitor:
             result = cursor.fetchone()
 
             if result and result[0] >= config['urgent_threshold']:
-                logger.warning(f"🚨 URGENT: {result[0]} new records in {table} within 5 minutes!")
+                logger.warning(f"🚨 URGENT: {result[0]} new records in {table} within 2 minutes!")
                 cursor.close()
                 return True
 
@@ -338,20 +328,20 @@ class RealtimeDatabaseMonitor:
             # Focus on 2025 data
             focus_start = datetime(self.config['focus_year'], 1, 1, 0, 0, 0)
 
-            # Smart query using created_at for efficiency (MariaDB compatible)
+            # Real-time query: Check for new data using time-based detection
+            # Convert last_processed to milliseconds for comparison
+            last_processed_ms = int(last_processed.timestamp() * 1000)
+            realtime_window = config.get('realtime_window', 300)  # Default 5 minutes
+
             query = f"""
             SELECT
                 COUNT(*) as count,
                 MAX({time_col}) as max_time,
                 MIN({time_col}) as min_time,
-                MAX({created_col}) as latest_created,
-                TIMESTAMPDIFF(SECOND, MAX({created_col}), NOW()) as seconds_since_creation,
-                COUNT(CASE WHEN {created_col} >= DATE_SUB(NOW(), INTERVAL 1 HOUR) THEN 1 END) as recent_count
+                COUNT(CASE WHEN {time_col} > UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL {realtime_window} SECOND)) * 1000 THEN 1 END) as recent_count
             FROM {table}
-            WHERE {time_col} > '{last_processed.isoformat()}'
-            AND {time_col} >= '{focus_start.isoformat()}'
-            AND {created_col} IS NOT NULL
-            AND exchange IN %s
+            WHERE {time_col} > {last_processed_ms}
+            AND `{exchange_col}` IN %s
             """
 
             # Determine column name for symbols and exchanges
@@ -360,9 +350,6 @@ class RealtimeDatabaseMonitor:
             pairs = self.config['monitor_pairs']
             exchanges = self.config['exchanges']
 
-            # Replace exchange column name in query
-            query = query.replace('AND exchange IN %s', f'AND `{exchange_col}` IN %s')
-
             cursor.execute(query, (exchanges,))
             result = cursor.fetchone()
 
@@ -370,22 +357,28 @@ class RealtimeDatabaseMonitor:
                 # Update activity tracking
                 activity = self.table_activity[table]
                 activity['last_data_found'] = datetime.now()
-                activity['data_frequency'] = result[5] if result[5] else 0  # recent_count
+                activity['data_frequency'] = result[3] if result[3] else 0  # recent_count
 
-                # Calculate priority based on recency and volume
-                seconds_since_creation = result[4] if result[4] else 999999
-                priority = self.calculate_priority(result[0], seconds_since_creation, table_config)
+                # Calculate priority based on volume and recency
+                recent_count = result[3] if result[3] else 0
+                if recent_count > 0:
+                    priority = "HIGH_PRIORITY"  # Recent data = high priority
+                elif result[0] >= config['urgent_threshold']:
+                    priority = "URGENT"
+                elif result[0] >= config['min_new_records']:
+                    priority = config['priority']
+                else:
+                    priority = "LOW"
 
                 new_data = {
                     'table': table,
                     'new_count': result[0],
-                    'min_time': result[2].isoformat() if result[2] else None,
-                    'max_time': result[1].isoformat() if result[1] else None,
-                    'latest_created': result[3].isoformat() if result[3] else None,
-                    'seconds_since_creation': seconds_since_creation,
-                    'recent_count': result[5] if result[5] else 0,
+                    'min_time': result[2] if result[2] else None,
+                    'max_time': result[1] if result[1] else None,
+                    'recent_count': recent_count,
                     'priority': priority,
-                    'last_processed': last_processed.isoformat()
+                    'last_processed': last_processed_ms,
+                    'detection_method': 'time_based_realtime'
                 }
 
                 # Smart threshold checking

@@ -248,15 +248,25 @@ class RealtimeTrainerPipeline:
         # Load trigger data if available
         trigger_data = self.load_trigger_data()
 
-        # Check if we should run training
+        # Real-time check: Always run if there's trigger data OR check for new data
         if mode == 'incremental':
             last_training = self.get_last_training_time()
-            if last_training and not trigger_data:
-                # Skip if we trained recently (within last hour) and no trigger
+
+            # Always proceed if trigger data exists
+            if trigger_data:
+                logger.info(f"🚀 Training triggered by new data: {trigger_data.get('tables_with_new_data', [])}")
+
+            # If no trigger, check if enough time has passed for periodic check
+            elif last_training:
                 time_since_last = datetime.now() - last_training
-                if time_since_last < timedelta(hours=1):
-                    logger.info(f"⏭️ Skipping training - last run {time_since_last} ago")
+                # Allow more frequent checks - every 15 minutes instead of 1 hour
+                if time_since_last < timedelta(minutes=15):
+                    logger.info(f"⏭️ Skipping frequent check - last run {time_since_last} ago (next check in 15 min)")
                     return True
+                else:
+                    logger.info(f"🔄 Periodic check - last run {time_since_last} ago")
+            else:
+                logger.info("🆕 No previous training found - running initial check")
 
         try:
             # Run CORE pipeline (this integrates with 6 core files)
