@@ -243,11 +243,20 @@ services:
       dockerfile: Dockerfile.monitor
     container_name: xgboost-realtime-monitor
     environment:
+      # Trading Database (read-only) for monitoring
       TRADING_DB_HOST: \${TRADING_DB_HOST}
       TRADING_DB_PORT: \${TRADING_DB_PORT}
       TRADING_DB_USER: \${TRADING_DB_USER}
       TRADING_DB_PASSWORD: \${TRADING_DB_PASSWORD}
       TRADING_DB_NAME: \${TRADING_DB_NAME}
+
+      # Results Database (read-write) for storage
+      DB_HOST: \${DB_HOST}
+      DB_PORT: \${DB_PORT}
+      DB_USER: \${DB_USER}
+      DB_PASSWORD: \${DB_PASSWORD}
+      DB_NAME: \${DB_NAME}
+
       OUTPUT_DIR: /app/output_train
 
       # Focus on 2025 data
@@ -277,11 +286,20 @@ services:
       dockerfile: Dockerfile.trainer
     container_name: xgboost-realtime-trainer
     environment:
+      # Trading Database (read-only) for monitoring
       TRADING_DB_HOST: \${TRADING_DB_HOST}
       TRADING_DB_PORT: \${TRADING_DB_PORT}
       TRADING_DB_USER: \${TRADING_DB_USER}
       TRADING_DB_PASSWORD: \${TRADING_DB_PASSWORD}
       TRADING_DB_NAME: \${TRADING_DB_NAME}
+
+      # Results Database (read-write) for storage - FIX: Missing DB_ variables
+      DB_HOST: \${DB_HOST}
+      DB_PORT: \${DB_PORT}
+      DB_USER: \${DB_USER}
+      DB_PASSWORD: \${DB_PASSWORD}
+      DB_NAME: \${DB_NAME}
+
       OUTPUT_DIR: /app/output_train
 
       # Training Configuration
@@ -350,6 +368,7 @@ RUN pip install --upgrade pip && \
     (pip install --no-cache-dir pytz==2025.2 || echo "⚠️ PyTZ install failed") && \
     (pip install --no-cache-dir fastapi==0.124.4 || echo "⚠️ FastAPI install failed") && \
     (pip install --no-cache-dir uvicorn==0.38.0 || echo "⚠️ Uvicorn install failed") && \
+    (pip install --no-cache-dir schedule==1.2.0 || echo "⚠️ Schedule install failed") && \
     echo "✅ Dependencies installation completed"
 
 # Copy API code
@@ -407,6 +426,7 @@ RUN pip install --upgrade pip && \
     (pip install --no-cache-dir pytz==2025.2 || echo "⚠️ PyTZ install failed") && \
     (pip install --no-cache-dir fastapi==0.124.4 || echo "⚠️ FastAPI install failed") && \
     (pip install --no-cache-dir uvicorn==0.38.0 || echo "⚠️ Uvicorn install failed") && \
+    (pip install --no-cache-dir schedule==1.2.0 || echo "⚠️ Schedule install failed") && \
     echo "✅ Dependencies installation completed"
 
 # Copy monitor and supporting files - FIX: Missing database_storage
@@ -454,6 +474,7 @@ RUN pip install --upgrade pip && \
     (pip install --no-cache-dir pytz==2025.2 || echo "⚠️ PyTZ install failed") && \
     (pip install --no-cache-dir fastapi==0.124.4 || echo "⚠️ FastAPI install failed") && \
     (pip install --no-cache-dir uvicorn==0.38.0 || echo "⚠️ Uvicorn install failed") && \
+    (pip install --no-cache-dir schedule==1.2.0 || echo "⚠️ Schedule install failed") && \
     echo "✅ Dependencies installation completed"
 
 # Copy ALL core training files - FIX: Missing files error

@@ -152,8 +152,12 @@ class DatabaseStorage:
 
         # Database configuration
         if db_config is None:
+            db_host = os.getenv('DB_HOST')
+            if not db_host:
+                raise ValueError("❌ DB_HOST environment variable not set! Required for database storage.")
+
             db_config = {
-                'host': os.getenv('DB_HOST', 'localhost'),
+                'host': db_host,
                 'port': int(os.getenv('DB_PORT', 3306)),
                 'database': os.getenv('DB_NAME', 'xgboost_training'),
                 'user': os.getenv('DB_USER', 'root'),

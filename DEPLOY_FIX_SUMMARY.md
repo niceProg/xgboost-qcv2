@@ -131,6 +131,50 @@ RUN pip install --upgrade pip && \
 # Core files akan diverifikasi di runtime, bukan build time
 ```
 
+### 8. ✅ **Fixed Missing Schedule Module**
+**Problem**: realtime_monitor.py butuh schedule module tapi tidak diinstall
+```
+❌ ModuleNotFoundError: No module named 'schedule'
+```
+
+**Solution**: Tambah schedule==1.2.0 ke dependency installation
+```dockerfile
+(pip install --no-cache-dir schedule==1.2.0 || echo "⚠️ Schedule install failed") && \
+```
+
+### 9. ✅ **Fixed Database Connection Environment Variables**
+**Problem**: Container connect ke localhost, but database ada di host environment
+```
+❌ Can't connect to MySQL server on 'localhost' ([Errno 111] Connection refused)
+```
+
+**Solution**: Tambah DB_* environment variables ke containers
+```yaml
+# docker-compose.yml - FIX: Missing DB_ variables
+environment:
+  # Trading Database (read-only) for monitoring
+  TRADING_DB_HOST: ${TRADING_DB_HOST}
+  TRADING_DB_PORT: ${TRADING_DB_PORT}
+  TRADING_DB_USER: ${TRADING_DB_USER}
+  TRADING_DB_PASSWORD: ${TRADING_DB_PASSWORD}
+  TRADING_DB_NAME: ${TRADING_DB_NAME}
+
+  # Results Database (read-write) for storage - FIX: Added!
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT}
+  DB_USER: ${DB_USER}
+  DB_PASSWORD: ${DB_PASSWORD}
+  DB_NAME: ${DB_NAME}
+```
+
+**Additional Fix**: Remove localhost fallback di database_storage.py
+```python
+# database_storage.py - FIX: No more localhost fallback
+db_host = os.getenv('DB_HOST')
+if not db_host:
+    raise ValueError("❌ DB_HOST environment variable not set!")
+```
+
 ## 📊 Container Architecture - FIXED:
 
 ```
@@ -208,6 +252,6 @@ curl http://localhost:8000/training/status
 
 ---
 *Generated: 2025-12-18*
-*Fixed Issues: 7/7*
+*Fixed Issues: 9/9*
 *Status: ✅ Ready for Docker Deployment*
-*Last Fix: SQLAlchemy dependency verification & debugging*
+*Last Fix: Database connection environment variables & schedule module*
