@@ -1,0 +1,25 @@
+Column Mapping:
+====================
+basis_close_basis
+basis_close_change
+basis_open_basis
+basis_open_change
+exchange
+funding_close
+funding_high
+funding_low
+funding_open
+interval
+ls_global_global_account_long_percent
+ls_global_global_account_long_short_ratio
+ls_global_global_account_short_percent
+ls_top_top_account_long_percent
+ls_top_top_account_long_short_ratio
+ls_top_top_account_short_percent
+price_close
+price_high
+price_low
+price_open
+price_volume_usd
+symbol
+time

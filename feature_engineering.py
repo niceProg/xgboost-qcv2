@@ -37,9 +37,17 @@ class FeatureEngineer:
         """Load merged data from previous step."""
         logger.info("Loading merged data...")
 
-        merged_file = self.output_dir / 'merged_7_tables.parquet'
+        # Try datasets directory first (new structure), then root (compatibility)
+        datasets_dir = self.output_dir / 'datasets'
+        merged_file = datasets_dir / 'merged_7_tables.parquet'
+
+        if not merged_file.exists():
+            # Fallback to root directory for backward compatibility
+            merged_file = self.output_dir / 'merged_7_tables.parquet'
+
         if not merged_file.exists():
             logger.error(f"Merged data file not found: {merged_file}")
+            logger.error(f"Checked: {datasets_dir / 'merged_7_tables.parquet'} and {self.output_dir / 'merged_7_tables.parquet'}")
             sys.exit(1)
 
         try:
@@ -331,14 +339,20 @@ class FeatureEngineer:
             logger.error("No data to save")
             return
 
-        # Save complete dataset with features
-        output_file = self.output_dir / 'features_engineered.parquet'
+        # Create directories
+        datasets_dir = self.output_dir / 'datasets'
+        features_dir = self.output_dir / 'features'
+        datasets_dir.mkdir(exist_ok=True)
+        features_dir.mkdir(exist_ok=True)
+
+        # Save complete dataset with features to datasets directory
+        output_file = datasets_dir / 'features_engineered.parquet'
         df.to_parquet(output_file, index=False)
         logger.info(f"Features saved to {output_file}")
 
-        # Save feature list
+        # Save feature list to features directory
         feature_cols = [col for col in self.feature_columns if col in df.columns]
-        feature_file = self.output_dir / 'feature_list.txt'
+        feature_file = features_dir / 'feature_list.txt'
         with open(feature_file, 'w') as f:
             f.write("Engineered Features:\n")
             f.write("=" * 20 + "\n")
@@ -346,11 +360,26 @@ class FeatureEngineer:
                 f.write(f"{col}\n")
         logger.info(f"Feature list saved to {feature_file}")
 
-        # Save features-only dataset
+        # Save features-only dataset to datasets directory
         features_df = df[feature_cols].copy()
-        features_file = self.output_dir / 'features_only.parquet'
+        features_file = datasets_dir / 'features_only.parquet'
         features_df.to_parquet(features_file, index=False)
         logger.info(f"Features-only dataset saved to {features_file}")
+
+        # Also keep copies in root for backward compatibility
+        root_output_file = self.output_dir / 'features_engineered.parquet'
+        root_features_file = self.output_dir / 'features_only.parquet'
+        root_feature_file = self.output_dir / 'feature_list.txt'
+
+        try:
+            df.to_parquet(root_output_file, index=False)
+            features_df.to_parquet(root_features_file, index=False)
+            root_feature_file.write_text(feature_file.read_text())
+            logger.info("Also saved copies to root directory for compatibility")
+        except Exception as e:
+            logger.warning(f"Could not save root compatibility copies: {e}")
+
+        # Duplicate line removed
 
         # Save engineered features to database if enabled
         if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':

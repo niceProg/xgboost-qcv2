@@ -57,17 +57,33 @@ class ModelEvaluator:
     def load_model_and_data(self) -> pd.DataFrame:
         logger.info("Loading model and test data...")
 
-        model_path = self.output_dir / "latest_model.joblib"
+        # Try models directory first (new structure), then root (compatibility)
+        models_dir = self.output_dir / 'models'
+        model_path = models_dir / "latest_model.joblib"
+
+        if not model_path.exists():
+            # Fallback to root directory for backward compatibility
+            model_path = self.output_dir / "latest_model.joblib"
+
         if not model_path.exists():
             logger.error(f"Model not found: {model_path}")
+            logger.error(f"Checked: {models_dir / 'latest_model.joblib'} and {self.output_dir / 'latest_model.joblib'}")
             sys.exit(1)
 
         self.model = joblib.load(model_path)
         logger.info(f"Model loaded from {model_path}")
 
-        labeled_file = self.output_dir / "labeled_data.parquet"
+        # Try datasets directory first, then root
+        datasets_dir = self.output_dir / 'datasets'
+        labeled_file = datasets_dir / "labeled_data.parquet"
+
+        if not labeled_file.exists():
+            # Fallback to root directory for backward compatibility
+            labeled_file = self.output_dir / "labeled_data.parquet"
+
         if not labeled_file.exists():
             logger.error(f"Labeled data not found: {labeled_file}")
+            logger.error(f"Checked: {datasets_dir / 'labeled_data.parquet'} and {self.output_dir / 'labeled_data.parquet'}")
             sys.exit(1)
 
         df = pd.read_parquet(labeled_file)

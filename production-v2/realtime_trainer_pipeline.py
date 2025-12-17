@@ -209,49 +209,34 @@ class RealtimeTrainerPipeline:
         else:
             logger.error("❌ Training failed - status updated")
 
-    def send_notification(self, success: bool, trigger_data: Optional[Dict] = None):
-        """Send notification about training completion"""
+    def log_training_result(self, success: bool, trigger_data: Optional[Dict] = None):
+        """Log training result to file and console"""
         try:
-            telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
-            telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
+            result = {
+                "timestamp": datetime.now().isoformat(),
+                "training_successful": success,
+                "pipeline_type": "CORE_6_STEP",
+                "trigger_reason": trigger_data.get('trigger_reason', 'automatic') if trigger_data else 'automatic',
+                "models_created": len(list(self.models_dir.glob('*.joblib'))) if success else 0,
+                "tables_with_new_data": trigger_data.get('tables_with_new_data', []) if trigger_data else []
+            }
 
-            if telegram_token and telegram_chat_id:
-                import requests
+            # Save to log file
+            log_file = self.state_dir / 'training_results.log'
+            with open(log_file, 'a') as f:
+                f.write(json.dumps(result) + '\n')
 
-                if success:
-                    message = (
-                        f"🎉 XGBoost Training Completed Successfully!\n\n"
-                        f"📊 Pipeline: CORE 6-Step\n"
-                        f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                        f"🎯 Trigger: {trigger_data.get('trigger_reason', 'automatic') if trigger_data else 'automatic'}\n"
-                        f"📁 Models: {len(list(self.models_dir.glob('*.joblib')))} files"
-                    )
-                else:
-                    message = (
-                        f"❌ XGBoost Training Failed!\n\n"
-                        f"📊 Pipeline: CORE 6-Step\n"
-                        f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                        f"🎯 Trigger: {trigger_data.get('trigger_reason', 'automatic') if trigger_data else 'automatic'}\n"
-                        f"⚠️ Please check logs for details"
-                    )
-
-                url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
-                data = {
-                    "chat_id": telegram_chat_id,
-                    "text": message,
-                    "parse_mode": "HTML"
-                }
-
-                response = requests.post(url, json=data, timeout=30)
-                if response.status_code == 200:
-                    logger.info("📱 Notification sent successfully")
-                else:
-                    logger.warning(f"⚠️ Failed to send notification: {response.text}")
+            # Console logging
+            if success:
+                logger.info(f"🎉 XGBoost Training Completed Successfully!")
+                logger.info(f"📊 Pipeline: CORE 6-Step")
+                logger.info(f"📁 Models: {result['models_created']} files created")
             else:
-                logger.info("📱 Telegram notifications not configured")
+                logger.error(f"❌ XGBoost Training Failed!")
+                logger.error(f"⚠️ Please check logs for details")
 
         except Exception as e:
-            logger.error(f"❌ Error sending notification: {e}")
+            logger.error(f"❌ Error logging training result: {e}")
 
     def run_training(self, mode: str = 'incremental') -> bool:
         """
@@ -289,15 +274,15 @@ class RealtimeTrainerPipeline:
             # Update status
             self.update_training_status(success, trigger_data)
 
-            # Send notification
-            self.send_notification(success, trigger_data)
+            # Log training result
+            self.log_training_result(success, trigger_data)
 
             return success
 
         except Exception as e:
             logger.error(f"❌ Real-time training failed: {e}")
             self.update_training_status(False, trigger_data)
-            self.send_notification(False, trigger_data)
+            self.log_training_result(False, trigger_data)
             return False
 
 def main():

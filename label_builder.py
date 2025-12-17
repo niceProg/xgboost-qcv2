@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 import logging
 from typing import Dict, List, Optional, Tuple
+from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -37,9 +38,17 @@ class LabelBuilder:
         """Load engineered features data."""
         logger.info("Loading engineered features data...")
 
-        features_file = self.output_dir / 'features_engineered.parquet'
+        # Try datasets directory first (new structure), then root (compatibility)
+        datasets_dir = self.output_dir / 'datasets'
+        features_file = datasets_dir / 'features_engineered.parquet'
+
+        if not features_file.exists():
+            # Fallback to root directory for backward compatibility
+            features_file = self.output_dir / 'features_engineered.parquet'
+
         if not features_file.exists():
             logger.error(f"Features file not found: {features_file}")
+            logger.error(f"Checked: {datasets_dir / 'features_engineered.parquet'} and {self.output_dir / 'features_engineered.parquet'}")
             sys.exit(1)
 
         try:

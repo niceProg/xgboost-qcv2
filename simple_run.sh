@@ -54,22 +54,60 @@ run_step "label_builder.py" "Step 4: Label Building"
 run_step "xgboost_trainer.py" "Step 5: Model Training"
 run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation"
 
+# Step 7: Restructure output directory
+echo "=========================================="
+echo "Step 7: Restructuring Output Directory"
+echo "Command: python restructure_output_train.py"
+echo "=========================================="
+
+if python restructure_output_train.py; then
+    echo "✅ Step 7 completed successfully"
+    echo ""
+else
+    echo "⚠️ Step 7 had issues, but pipeline completed"
+    echo ""
+fi
+
 echo "=========================================="
 echo "✅ Pipeline completed successfully!"
 echo "=========================================="
 
-# Show output directory contents
+# Show structured output directory contents
 echo ""
-echo "Output directory contents:"
+echo "Structured Output Directory Contents:"
+echo "📁 $OUTPUT_DIR/"
 ls -la "$OUTPUT_DIR"
 
-# Show model files
 echo ""
-echo "Trained models:"
-ls -la "$OUTPUT_DIR"/*.joblib 2>/dev/null || echo "No model files found"
+echo "📁 Model files:"
+if [ -d "$OUTPUT_DIR/models" ]; then
+    ls -la "$OUTPUT_DIR/models/"
+else
+    ls -la "$OUTPUT_DIR"/*.joblib 2>/dev/null || echo "No model files found"
+fi
+
+echo ""
+echo "📁 Dataset files:"
+if [ -d "$OUTPUT_DIR/datasets" ]; then
+    echo "  📄 Dataset summary:"
+    ls -la "$OUTPUT_DIR/datasets/"*summary*.txt 2>/dev/null || echo "  No dataset summary found"
+    echo ""
+    echo "  📄 Datasets:"
+    ls -la "$OUTPUT_DIR/datasets/"*.parquet 2>/dev/null || echo "  No dataset files found"
+fi
+
+echo ""
+echo "📁 Feature files:"
+if [ -d "$OUTPUT_DIR/features" ]; then
+    ls -la "$OUTPUT_DIR/features/" || echo "No feature files found"
+fi
 
 echo ""
 echo "Next steps:"
-echo "1. Start API server: python api_server.py"
-echo "2. Access API at: http://localhost:8000/api/v1/"
-echo "3. View results: ls -la $OUTPUT_DIR"
+echo "1. Deploy real-time system: cd production-v2 && ./deploy.sh"
+echo "2. Access structured API: http://localhost:8000/output_train/"
+echo "3. View latest model: http://localhost:8000/output_train/models/latest"
+echo "4. View dataset summary: http://localhost:8000/output_train/datasets/summary"
+echo ""
+echo "✅ Pipeline completed with structured output!"
+echo "📁 New structure ready for production-v2 API access"

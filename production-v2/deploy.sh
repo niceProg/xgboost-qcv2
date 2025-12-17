@@ -151,8 +151,21 @@ fi
 print_status "✅ Database connection validated"
 echo ""
 
+# Restructure output_train directory
+print_header "Step 4: Restructuring Output Train Directory"
+echo ""
+
+print_status "Running directory restructuring..."
+python3 ../restructure_output_train.py
+
+if [ $? -eq 0 ]; then
+    print_status "✅ Directory restructuring completed"
+else
+    print_warning "⚠️ Directory restructuring had issues, continuing..."
+fi
+
 # Setup database for monitoring
-print_header "Step 4: Setting up Database for Smart Monitoring"
+print_header "Step 5: Setting up Database for Smart Monitoring"
 echo ""
 
 if [ -f "setup_database.py" ]; then
@@ -172,7 +185,7 @@ fi
 echo ""
 
 # Create Docker Compose file
-print_header "Step 5: Creating Docker Configuration"
+print_header "Step 6: Creating Docker Configuration"
 echo ""
 
 cat > docker-compose.yml << EOF
@@ -241,9 +254,6 @@ services:
       TRADING_DB_NAME: \${TRADING_DB_NAME}
       OUTPUT_DIR: /app/output_train
 
-      TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
-      TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
-
       # Focus on 2025 data
       focus_year: 2025
 
@@ -270,10 +280,6 @@ services:
       TRADING_DB_PASSWORD: \${TRADING_DB_PASSWORD}
       TRADING_DB_NAME: \${TRADING_DB_NAME}
       OUTPUT_DIR: /app/output_train
-
-      TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
-      TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
-      WEBHOOK_URL: \${WEBHOOK_URL}
 
       # Training Configuration
       PERFORMANCE_THRESHOLD: \${PERFORMANCE_THRESHOLD:-0.6}
@@ -313,7 +319,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy API code
+COPY structured_api.py .
+
+# Also copy original for compatibility
 COPY quantconnect_api.py .
+
+# Copy restructuring script
+COPY ../restructure_output_train.py ../
 
 # Create necessary directories
 RUN mkdir -p /app/output_train /app/state /app/logs
@@ -326,7 +338,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run API server
-CMD ["python", "quantconnect_api.py"]
+CMD ["python", "structured_api.py"]
 EOF
 
 # Monitor Dockerfile
@@ -415,7 +427,7 @@ print_status "✅ Dockerfiles and requirements created"
 echo ""
 
 # Build and start containers
-print_header "Step 6: Building and Starting Services"
+print_header "Step 7: Building and Starting Services"
 echo ""
 
 print_status "Building Docker containers..."
@@ -429,7 +441,7 @@ print_status "Waiting for services to start..."
 sleep 30
 
 # Check service health
-print_header "Step 7: Verifying Deployment"
+print_header "Step 8: Verifying Deployment"
 echo ""
 
 # Check API health
@@ -454,7 +466,7 @@ fi
 echo ""
 
 # Create management scripts
-print_header "Step 8: Creating Management Scripts"
+print_header "Step 9: Creating Management Scripts"
 echo ""
 
 # Status script
@@ -473,6 +485,11 @@ echo "------------------"
 API_URL="http://localhost:8000"
 echo "📡 API Health:"
 curl -s "$API_URL/health" | python3 -m json.tool 2>/dev/null || echo "   API not responding"
+
+echo ""
+echo "📚 API Documentation:"
+echo "   Swagger UI: $API_URL/docs"
+echo "   ReDoc: $API_URL/redoc"
 
 echo ""
 echo "📈 API Status:"
@@ -526,39 +543,52 @@ cat > test_api.sh << 'EOF'
 
 API_URL="http://localhost:8000"
 
-echo "🧪 Testing XGBoost API Endpoints"
-echo "================================="
+echo "🧪 Testing Read-Only XGBoost API Endpoints"
+echo "========================================"
 
 echo ""
-echo "1. Testing Health Check..."
+echo "1. Testing API Root..."
+response=$(curl -s "$API_URL/")
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "2. Testing Health Check..."
 response=$(curl -s "$API_URL/health")
 echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
 
 echo ""
-echo "2. Testing Model Prediction..."
-response=$(curl -s -X POST "$API_URL/predict" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "features": {
-            "price_close": 42000.0,
-            "volume_usd": 1000000.0,
-            "price_high": 42500.0,
-            "price_low": 41500.0,
-            "exchange": "binance"
-        }
-    }')
+echo "3. Testing Model Info..."
+response=$(curl -s "$API_URL/model/info")
 echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
 
 echo ""
-echo "3. Testing Signal Generation..."
-response=$(curl -s -X POST "$API_URL/signal" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "exchange": "binance",
-        "symbol": "BTCUSDT",
-        "interval": "1h"
-    }')
+echo "4. Testing System Status..."
+response=$(curl -s "$API_URL/status")
 echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "5. Testing Training Status..."
+response=$(curl -s "$API_URL/training/status")
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "6. Testing Model List..."
+response=$(curl -s "$API_URL/model/list")
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "7. Testing Monitoring Metrics..."
+response=$(curl -s "$API_URL/monitoring/metrics")
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "8. Testing Config Info..."
+response=$(curl -s "$API_URL/config/info")
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "📚 Full Documentation: $API_URL/docs"
+echo "🔒 Mode: Read-Only (GET methods only)"
 EOF
 
 # Trigger training script
@@ -599,11 +629,19 @@ echo "  ✅ Real-time database monitor (2025 data)"
 echo "  ✅ Incremental model trainer"
 echo "  ✅ Management scripts"
 echo ""
-echo "${YELLOW}API Endpoints:${NC}"
-echo "  📊 Health: $API_URL/health"
-echo "  🎯 Predict: $API_URL/predict"
-echo "  📈 Signal: $API_URL/signal"
-echo "  📋 Status: $API_URL/status"
+echo "${YELLOW}Structured API Endpoints:${NC}"
+echo "  📁 Directory Listing: $API_URL/output_train/"
+echo "  🤖 Model Files: $API_URL/output_train/models/"
+echo "  🎯 Latest Model: $API_URL/output_train/models/latest"
+echo "  📋 Dataset Summary: $API_URL/output_train/datasets/summary"
+echo "  📊 All Datasets: $API_URL/output_train/datasets/"
+echo "  🔧 Structure Info: $API_URL/structure"
+echo "  ❤️ Health Check: $API_URL/health"
+echo ""
+echo "📚 Documentation: $API_URL/docs"
+echo "📖 Alternative Docs: $API_URL/redoc"
+echo ""
+echo "🔒 Mode: Read-Only (GET methods only - file access only)"
 echo ""
 echo "${YELLOW}Management Commands:${NC}"
 echo "  📊 System status: ./status.sh"

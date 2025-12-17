@@ -15,6 +15,7 @@ from sklearn.model_selection import train_test_split, TimeSeriesSplit, cross_val
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 import joblib
 import json
+import shutil
 from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
@@ -43,11 +44,19 @@ class XGBoostTrainer:
         """Load prepared training data."""
         logger.info("Loading training data...")
 
-        X_file = self.output_dir / 'X_train_features.parquet'
-        y_file = self.output_dir / 'y_train_labels.parquet'
+        # Try datasets directory first (new structure), then root (compatibility)
+        datasets_dir = self.output_dir / 'datasets'
+        X_file = datasets_dir / 'X_train_features.parquet'
+        y_file = datasets_dir / 'y_train_labels.parquet'
+
+        if not X_file.exists() or not y_file.exists():
+            # Fallback to root directory for backward compatibility
+            X_file = self.output_dir / 'X_train_features.parquet'
+            y_file = self.output_dir / 'y_train_labels.parquet'
 
         if not X_file.exists() or not y_file.exists():
             logger.error("Training data files not found. Run label_builder.py first.")
+            logger.error(f"Checked: {datasets_dir / 'X_train_features.parquet'} and {self.output_dir / 'X_train_features.parquet'}")
             sys.exit(1)
 
         try:
@@ -243,15 +252,27 @@ class XGBoostTrainer:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         model_name = f"xgboost_trading_model_{timestamp}.joblib"
 
-        # Save model
-        model_path = self.output_dir / model_name
+        # Create models directory if it doesn't exist
+        models_dir = self.output_dir / 'models'
+        models_dir.mkdir(exist_ok=True)
+
+        # Save model to models directory
+        model_path = models_dir / model_name
         joblib.dump(model, model_path)
         logger.info(f"Model saved to {model_path}")
 
-        # Save as latest model
-        latest_model_path = self.output_dir / 'latest_model.joblib'
+        # Save as latest model (overwrite existing)
+        latest_model_path = models_dir / 'latest_model.joblib'
         joblib.dump(model, latest_model_path)
         logger.info(f"Latest model saved to {latest_model_path}")
+
+        # No symlink creation - use direct file copies instead
+        # Copy latest model to root for backward compatibility
+        root_latest_path = self.output_dir / 'latest_model.joblib'
+        if root_latest_path.exists():
+            root_latest_path.unlink()
+        shutil.copy2(latest_model_path, root_latest_path)
+        logger.info(f"Latest model copied to root: {root_latest_path}")
 
         # Save training results
         results = {

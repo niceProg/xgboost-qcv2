@@ -285,17 +285,8 @@ class DatabaseStorage:
             db.add(feature)
             db.commit()
 
-            # Copy file to organized storage path
-            organized_path = self.storage_path / self.session_id / feature_type
-            organized_path.mkdir(parents=True, exist_ok=True)
-
-            dest_path = organized_path / file_path.name
-            if file_path != dest_path:
-                import shutil
-                shutil.copy2(file_path, dest_path)
-                logger.info(f"Copied file to: {dest_path}")
-
-            return str(dest_path)
+            # Return the original file path (no more copying)
+            return str(file_path)
 
         except Exception as e:
             db.rollback()
@@ -480,6 +471,70 @@ class DatabaseStorage:
             raise
         finally:
             db.close()
+
+    def store_feature_data(self,
+                          file_path: Optional[Union[str, Path]] = None,
+                          table_name: Optional[str] = None,
+                          feature_type: Optional[str] = None,
+                          session_id: Optional[str] = None,
+                          data: Optional[Union[pd.DataFrame, dict]] = None,
+                          description: Optional[str] = None) -> str:
+        """Store feature data in database and return the stored path.
+
+        Can store either file path or DataFrame data directly.
+
+        Args:
+            file_path: Path to file (optional)
+            table_name: Table name for metadata (optional)
+            feature_type: Type of feature data (required if file_path provided)
+            session_id: Session ID (optional, uses current session if not provided)
+            data: DataFrame or dict data to store directly (optional)
+            description: Description of the data (optional)
+
+        Returns:
+            Path to stored file or session_id for stored data
+        """
+        # Handle storing DataFrame/dict data directly
+        if data is not None:
+            # Store the data in FeatureStorage table as metadata
+            db = self.get_session()
+            try:
+                feature = FeatureStorage(
+                    session_id=session_id or self.session_id,
+                    feature_type=feature_type,
+                    table_name=table_name,
+                    file_path=None,  # No file path when storing data directly
+                    row_count=len(data) if hasattr(data, '__len__') else 1,
+                    file_size_bytes=0,  # Not applicable for direct data
+                    file_format='dataframe' if isinstance(data, pd.DataFrame) else 'json',
+                    data_sample=json.dumps(data.to_dict() if isinstance(data, pd.DataFrame) else data,
+                                         default=str)[:10000],  # Limit to 10k chars
+                    schema_info=json.dumps({
+                        'columns': list(data.columns) if isinstance(data, pd.DataFrame) else list(data.keys()),
+                        'dtypes': {col: str(dtype) for col, dtype in data.dtypes.items()} if isinstance(data, pd.DataFrame) else {},
+                        'shape': data.shape if hasattr(data, 'shape') else None,
+                        'description': description
+                    })
+                )
+
+                db.add(feature)
+                db.commit()
+                logger.info(f"Stored feature data: {feature_type} for session: {session_id or self.session_id}")
+                return session_id or self.session_id
+
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Failed to store feature data: {e}")
+                raise
+            finally:
+                db.close()
+
+        # Handle storing file path
+        elif file_path is not None:
+            return self.store_file(file_path, table_name or feature_type, feature_type, description)
+
+        else:
+            raise ValueError("Either file_path or data must be provided")
 
     def cleanup_old_data(self, days: int = 30):
         """Clean up old data from database."""

@@ -1,14 +1,18 @@
-# XGBoost Real-time Trading System - Production V2
+# XGBoost Trading System - Production V2
 
-## 🎯 Purpose: Real-time Monitoring & FastAPI Server Only
+## 🎯 Dual Purpose System
 
-**Folder ini khusus untuk:**
-- ✅ Real-time monitoring untuk 2025 data baru
-- ✅ FastAPI server untuk QuantConnect integration
-- ✅ Automated model updates (incremental training)
-- ✅ 24/7 system uptime
+### **1. Incremental Training Engine**
+- 📊 **Monitor**: Cek database untuk data baru (2025+)
+- 🧠 **Train**: Incremental XGBoost training (hanya data baru)
+- 🔄 **Update**: Model otomatis updated tanpa training ulang dari 2024
 
-**Historical training tetap pakai:** `simple_run.sh` di parent folder
+### **2. Universal FastAPI Server**
+- 🌐 **Open API**: Untuk siapapun (QuantConnect, external apps, web, mobile)
+- 📚 **Complete Documentation**: Auto-generated OpenAPI docs
+- 🔌 **Comprehensive Routes**: Full CRUD dan utility endpoints
+
+**Historical training tetap pakai:** `simple_run.sh` di parent folder (hanya sekali untuk initial model)
 
 ## 🚀 Quick Start - Real-time System
 

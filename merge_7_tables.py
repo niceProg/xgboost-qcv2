@@ -81,15 +81,26 @@ class TableMerger:
         logger.info("Loading table data from parquet files...")
         all_data = {}
 
-        # Check for base table first
-        base_file = self.output_dir / f"{self.base_table}.parquet"
+        # Check for base table first (try new structure first, then root)
+        raw_data_dir = self.output_dir / 'datasets' / 'raw'
+        base_file = raw_data_dir / f"{self.base_table}.parquet"
+
+        # Fallback to root directory for backward compatibility
+        if not base_file.exists():
+            base_file = self.output_dir / f"{self.base_table}.parquet"
+
         if not base_file.exists():
             logger.error(f"Base table {self.base_table} not found at {base_file}")
+            logger.error(f"Checked: {raw_data_dir / f'{self.base_table}.parquet'} and {self.output_dir / f'{self.base_table}.parquet'}")
             sys.exit(1)
 
-        # Load all tables
+            # Load all tables
         for table_name, info in self.tables_info.items():
-            file_path = self.output_dir / f"{table_name}.parquet"
+            # Try new structure first, then fallback to root
+            file_path = raw_data_dir / f"{table_name}.parquet"
+            if not file_path.exists():
+                file_path = self.output_dir / f"{table_name}.parquet"
+
             if file_path.exists():
                 try:
                     df = pd.read_parquet(file_path)
@@ -295,18 +306,24 @@ class TableMerger:
             logger.error("No data to save")
             return
 
-        # Save as parquet
-        output_file = self.output_dir / 'merged_7_tables.parquet'
+        # Create datasets directory
+        datasets_dir = self.output_dir / 'datasets'
+        features_dir = self.output_dir / 'features'
+        datasets_dir.mkdir(exist_ok=True)
+        features_dir.mkdir(exist_ok=True)
+
+        # Save as parquet to datasets directory
+        output_file = datasets_dir / 'merged_7_tables.parquet'
         df.to_parquet(output_file, index=False)
         logger.info(f"Merged data saved to {output_file}")
 
-        # Also save as CSV for easy inspection
-        csv_file = self.output_dir / 'merged_7_tables.csv'
+        # Also save as CSV to datasets directory for easy inspection
+        csv_file = datasets_dir / 'merged_7_tables.csv'
         df.to_csv(csv_file, index=False)
         logger.info(f"Merged data saved to {csv_file}")
 
-        # Save column mapping
-        mapping_file = self.output_dir / 'column_mapping.txt'
+        # Save column mapping to features directory
+        mapping_file = features_dir / 'column_mapping.txt'
         with open(mapping_file, 'w') as f:
             f.write("Column Mapping:\n")
             f.write("=" * 20 + "\n")
@@ -334,7 +351,13 @@ class TableMerger:
                 from dotenv import load_dotenv
                 load_dotenv()
 
-                conn = pymysql.connect(**db_config)
+                conn = pymysql.connect(
+                    host=os.getenv('DB_HOST', '103.150.81.86'),
+                    port=int(os.getenv('DB_PORT', 3306)),
+                    database=os.getenv('DB_NAME', 'xgboostqc'),
+                    user=os.getenv('DB_USER', 'xgboostqc'),
+                    password=os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
+                )
                 cursor = conn.cursor()
 
                 cursor.execute(

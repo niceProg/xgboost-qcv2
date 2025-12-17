@@ -171,7 +171,10 @@ class DatabaseLoader:
             return
 
         filename = f"{table_name}.parquet"
-        filepath = self.output_dir / filename
+        # Save to datasets/raw directory
+        raw_data_dir = self.output_dir / 'datasets' / 'raw'
+        raw_data_dir.mkdir(parents=True, exist_ok=True)
+        filepath = raw_data_dir / filename
 
         try:
             df.to_parquet(filepath, index=False)
