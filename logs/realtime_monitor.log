@@ -824,3 +824,53 @@
 2025-12-18 02:59:00,685 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
 2025-12-18 02:59:00,685 - INFO - ⏰ Time-based notification: 4.0 min since last, data activity: 5.0 min ago
 2025-12-18 02:59:01,448 - INFO - 📱 Time-based notification sent successfully (#2)
+2025-12-18 03:13:14,378 - INFO - 🧪 Running in test mode
+2025-12-18 03:13:14,499 - INFO - ✅ Connected to database: newera
+2025-12-18 03:13:14,541 - INFO - 📊 New data in cg_spot_price_history: 26 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:14,541 - INFO -    Time range: 1766001540000 to 1766002320000
+2025-12-18 03:13:14,542 - INFO -    Recent records: 7
+2025-12-18 03:13:14,542 - INFO -    Reason: Minimum threshold met: 26 >= 1
+2025-12-18 03:13:14,567 - INFO - 📊 New data in cg_funding_rate_history: 26 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:14,567 - INFO -    Time range: 1766001540000 to 1766002320000
+2025-12-18 03:13:14,567 - INFO -    Recent records: 14
+2025-12-18 03:13:14,567 - INFO -    Reason: Minimum threshold met: 26 >= 1
+2025-12-18 03:13:14,592 - INFO - 📊 New data in cg_futures_basis_history: 156 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:14,592 - INFO -    Time range: 1766001540000 to 1766002320000
+2025-12-18 03:13:14,592 - INFO -    Recent records: 84
+2025-12-18 03:13:14,592 - INFO -    Reason: Minimum threshold met: 156 >= 1
+2025-12-18 03:13:14,618 - INFO - 📊 New data in cg_spot_aggregated_taker_volume_history: 144 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:14,618 - INFO -    Time range: 1766001540000 to 1766002260000
+2025-12-18 03:13:14,618 - INFO -    Recent records: 30
+2025-12-18 03:13:14,618 - INFO -    Reason: Minimum threshold met: 144 >= 1
+2025-12-18 03:13:14,642 - INFO - 📊 New data in cg_long_short_global_account_ratio_history: 26 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:14,642 - INFO -    Time range: 1766001540000 to 1766002320000
+2025-12-18 03:13:14,642 - INFO -    Recent records: 26
+2025-12-18 03:13:14,643 - INFO -    Reason: Minimum threshold met: 26 >= 1
+2025-12-18 03:13:14,667 - INFO - 📊 New data in cg_long_short_top_account_ratio_history: 26 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:14,668 - INFO -    Time range: 1766001540000 to 1766002320000
+2025-12-18 03:13:14,668 - INFO -    Recent records: 26
+2025-12-18 03:13:14,668 - INFO -    Reason: Minimum threshold met: 26 >= 1
+2025-12-18 03:13:14,668 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
+2025-12-18 03:13:14,668 - INFO - 🎯 Training trigger priority order: ['cg_spot_price_history(HIGH_PRIORITY)', 'cg_funding_rate_history(HIGH_PRIORITY)', 'cg_futures_basis_history(HIGH_PRIORITY)', 'cg_spot_aggregated_taker_volume_history(HIGH_PRIORITY)', 'cg_long_short_global_account_ratio_history(HIGH_PRIORITY)', 'cg_long_short_top_account_ratio_history(HIGH_PRIORITY)']
+2025-12-18 03:13:14,668 - INFO - 🚀 Triggered real-time training for 6 tables
+2025-12-18 03:13:15,493 - INFO - 📱 Telegram notification sent successfully (#1)
+2025-12-18 03:13:15,495 - INFO - ✅ Updated last_processed timestamps
+2025-12-18 03:13:15,500 - INFO - Test completed: Found new data
+2025-12-18 03:13:22,235 - INFO - ✅ Connected to database: newera
+2025-12-18 03:13:22,285 - INFO - 📊 New data in cg_funding_rate_history: 1 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:22,285 - INFO -    Time range: 1766002380000 to 1766002380000
+2025-12-18 03:13:22,286 - INFO -    Recent records: 1
+2025-12-18 03:13:22,286 - INFO -    Reason: Minimum threshold met: 1 >= 1
+2025-12-18 03:13:22,361 - INFO - 📊 New data in cg_long_short_global_account_ratio_history: 1 records (Priority: HIGH_PRIORITY)
+2025-12-18 03:13:22,361 - INFO -    Time range: 1766002380000 to 1766002380000
+2025-12-18 03:13:22,362 - INFO -    Recent records: 1
+2025-12-18 03:13:22,362 - INFO -    Reason: Minimum threshold met: 1 >= 1
+2025-12-18 03:13:22,387 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
+2025-12-18 03:13:22,388 - INFO - 🎯 Training trigger priority order: ['cg_funding_rate_history(HIGH_PRIORITY)', 'cg_long_short_global_account_ratio_history(HIGH_PRIORITY)']
+2025-12-18 03:13:22,388 - INFO - 🚀 Triggered real-time training for 2 tables
+2025-12-18 03:13:23,208 - INFO - 📱 Telegram notification sent successfully (#1)
+2025-12-18 03:13:23,209 - INFO - ✅ Updated last_processed timestamps
+2025-12-18 03:13:23,394 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
+2025-12-18 03:13:25,566 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
+2025-12-18 03:13:27,721 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
+2025-12-18 03:13:29,870 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped

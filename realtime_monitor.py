@@ -351,7 +351,10 @@ class RealtimeDatabaseMonitor:
             if result and result[0] > 0:  # If we have new records
                 # Update activity tracking
                 activity = self.table_activity[table]
-                activity['last_data_found'] = datetime.now()
+                # Use timezone-aware datetime for consistency
+                import pytz
+                jakarta_tz = pytz.timezone('Asia/Jakarta')
+                activity['last_data_found'] = datetime.now(jakarta_tz)
                 activity['data_frequency'] = result[3] if result[3] else 0  # recent_count
 
                 # Calculate priority based on volume and recency
@@ -409,7 +412,10 @@ class RealtimeDatabaseMonitor:
                     logger.info(f"📝 {result[0]} new records in {table} (below threshold)")
 
             # Update last check time even if no data found
-            self.table_activity[table]['last_check'] = datetime.now()
+            # Use timezone-aware datetime for consistency
+            import pytz
+            jakarta_tz = pytz.timezone('Asia/Jakarta')
+            self.table_activity[table]['last_check'] = datetime.now(jakarta_tz)
 
             cursor.close()
             return None
@@ -441,8 +447,11 @@ class RealtimeDatabaseMonitor:
         try:
             # Prepare trigger file
             trigger_file = Path('./state/realtime_trigger.json')
+            # Use timezone-aware datetime for consistency
+            import pytz
+            jakarta_tz = pytz.timezone('Asia/Jakarta')
             trigger_info = {
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': datetime.now(jakarta_tz).isoformat(),
                 'trigger_reason': 'new_data_arrival',
                 'new_data_summary': {
                     data['table']: data['new_count']
@@ -491,16 +500,18 @@ class RealtimeDatabaseMonitor:
         if not self.config['notification']['enabled']:
             return
 
-        current_time = datetime.now()
+        # Use timezone-aware datetime for consistency
+        import pytz
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+        current_time = datetime.now(jakarta_tz)
 
         try:
             total_records = sum(data['new_count'] for data in new_data_list)
 
-            import pytz
             import time
             import hashlib
 
-            # Convert to WIB (UTC+7)
+            # Convert to WIB (UTC+7) - current_time already has timezone
             jakarta_tz = pytz.timezone('Asia/Jakarta')
             now_wib = datetime.now(jakarta_tz)
 
@@ -594,7 +605,10 @@ Table Breakdown:
         skipped_count = 0
         has_data_activity = False
 
-        current_time = datetime.now()
+        # Use timezone-aware datetime to avoid timezone comparison errors
+        import pytz
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+        current_time = datetime.now(jakarta_tz)
 
         for table in self.tables:
             # Always check all tables for now
