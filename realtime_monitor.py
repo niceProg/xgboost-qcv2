@@ -19,12 +19,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Create logs directory if it doesn't exist
+os.makedirs('./logs', exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/var/log/realtime_monitor.log'),
+        logging.FileHandler('./logs/realtime_monitor.log'),
         logging.StreamHandler()
     ]
 )
@@ -314,7 +317,7 @@ class RealtimeDatabaseMonitor:
             cursor = self.connection.cursor()
             table_config = self.table_configs[table]
             time_col = table_config['time_col']
-            created_col = table_config['created_col']
+            # We don't use created_col anymore, only time_col for data detection
 
             # Get last processed timestamp (from time column, not created_at)
             last_processed_timestamp = self.state['last_processed'][table]
@@ -328,10 +331,15 @@ class RealtimeDatabaseMonitor:
             # Focus on 2025 data
             focus_start = datetime(self.config['focus_year'], 1, 1, 0, 0, 0)
 
+            # Determine column name for symbols and exchanges
+            symbol_col = 'symbol' if 'symbol' in table_config['key_cols'] else 'pair'
+            exchange_col = table_config.get('exchange_col', 'exchange')  # Default to 'exchange'
+            exchanges = self.config['exchanges']
+
             # Real-time query: Check for new data using time-based detection
             # Convert last_processed to milliseconds for comparison
             last_processed_ms = int(last_processed.timestamp() * 1000)
-            realtime_window = config.get('realtime_window', 300)  # Default 5 minutes
+            realtime_window = table_config.get('realtime_window', 300)  # Default 5 minutes
 
             query = f"""
             SELECT
@@ -343,12 +351,6 @@ class RealtimeDatabaseMonitor:
             WHERE {time_col} > {last_processed_ms}
             AND `{exchange_col}` IN %s
             """
-
-            # Determine column name for symbols and exchanges
-            symbol_col = 'symbol' if 'symbol' in table_config['key_cols'] else 'pair'
-            exchange_col = table_config.get('exchange_col', 'exchange')  # Default to 'exchange'
-            pairs = self.config['monitor_pairs']
-            exchanges = self.config['exchanges']
 
             cursor.execute(query, (exchanges,))
             result = cursor.fetchone()
@@ -397,15 +399,15 @@ class RealtimeDatabaseMonitor:
                     trigger_reason = f"Urgent threshold: {result[0]} >= {table_config['urgent_threshold']}"
 
                 # Condition 3: Recent high-frequency activity
-                elif result[5] and result[5] >= table_config['urgent_threshold']:
+                elif result[3] and result[3] >= table_config['urgent_threshold']:
                     should_trigger = True
                     priority = "HIGH_PRIORITY"
-                    trigger_reason = f"Recent activity: {result[5]} records in last hour"
+                    trigger_reason = f"Recent activity: {result[3]} records in last {realtime_window} seconds"
 
                 if should_trigger:
                     logger.info(f"📊 New data in {table}: {result[0]} records (Priority: {priority})")
                     logger.info(f"   Time range: {new_data['min_time']} to {new_data['max_time']}")
-                    logger.info(f"   Latest created: {new_data['latest_created']}")
+                    logger.info(f"   Recent records: {new_data.get('recent_count', 0)}")
                     logger.info(f"   Reason: {trigger_reason}")
 
                     cursor.close()
@@ -450,7 +452,7 @@ class RealtimeDatabaseMonitor:
                 'timestamp': datetime.now().isoformat(),
                 'trigger_reason': 'new_data_arrival',
                 'new_data_summary': {
-                    table: data['new_count']
+                    data['table']: data['new_count']
                     for data in new_data_list
                 },
                 'tables_with_new_data': [data['table'] for data in new_data_list]
