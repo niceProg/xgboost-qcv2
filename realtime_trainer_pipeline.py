@@ -15,8 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import pandas as pd
 
-# Add parent directory to path for importing core modules
-sys.path.append(str(Path(__file__).parent.parent))
+# We're now in the root directory, so no need to modify sys.path
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -24,11 +23,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configure logging
+# Create logs directory if it doesn't exist
+os.makedirs('./logs', exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/var/log/realtime_trainer.log'),
+        logging.FileHandler('./logs/realtime_trainer.log'),
         logging.StreamHandler()
     ]
 )
@@ -40,14 +42,14 @@ class RealtimeTrainerPipeline:
     This properly integrates with the existing training infrastructure
     """
 
-    def __init__(self, output_dir: str = '/app/output_train'):
+    def __init__(self, output_dir: str = './output_train'):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True, parents=True)
         self.models_dir = self.output_dir / 'models'
         self.models_dir.mkdir(exist_ok=True)
 
         # State directory for tracking
-        self.state_dir = Path('/app/state')
+        self.state_dir = Path('./state')
         self.state_dir.mkdir(exist_ok=True, parents=True)
 
         logger.info(f"🚀 Real-time trainer initialized")
@@ -110,17 +112,19 @@ class RealtimeTrainerPipeline:
             ("model_evaluation_with_leverage.py", "Model Evaluation")
         ]
 
-        # Change to parent directory where core scripts are located
-        parent_dir = Path(__file__).parent.parent.absolute()  # Get absolute path
-        original_cwd = os.getcwd()
+        # Scripts are in current directory - use relative paths
+        current_dir = os.getcwd()
+        original_cwd = current_dir
+
+        logger.info(f"📂 Scripts directory: {current_dir}")
+        logger.info(f"📍 Working directory: {current_dir}")
 
         try:
-            os.chdir(parent_dir)
 
             for step_num, (script, description) in enumerate(core_scripts, 1):
                 logger.info(f"🔧 Step {step_num}: {description}")
 
-                # Build command - scripts are now in parent directory
+                # Build command with relative path (now in correct directory)
                 cmd = [
                     "python3", script,
                     "--exchange", exchange,
@@ -301,8 +305,8 @@ def main():
     parser = argparse.ArgumentParser(description='Real-time XGBoost Trainer with CORE Pipeline')
     parser.add_argument('--mode', choices=['incremental', 'full'], default='incremental',
                       help='Training mode (default: incremental)')
-    parser.add_argument('--output-dir', default='/app/output_train',
-                      help='Output directory (default: /app/output_train)')
+    parser.add_argument('--output-dir', default='./output_train',
+                      help='Output directory (default: ./output_train)')
 
     args = parser.parse_args()
 
