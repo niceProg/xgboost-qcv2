@@ -151,17 +151,25 @@ fi
 print_status "✅ Database connection validated"
 echo ""
 
-# Restructure output_train directory
-print_header "Step 4: Restructuring Output Train Directory"
+# Check output_train directory structure
+print_header "Step 4: Verifying Output Train Directory Structure"
 echo ""
 
-print_status "Running directory restructuring..."
-python3 ../restructure_output_train.py
-
-if [ $? -eq 0 ]; then
-    print_status "✅ Directory restructuring completed"
+print_status "Checking directory structure..."
+if [ -d "../output_train" ]; then
+    # Check if structure is already correct
+    if [ -d "../output_train/models" ] && [ -d "../output_train/datasets" ]; then
+        print_status "✅ Directory structure already organized"
+        print_status "   Found models and datasets directories"
+    else
+        print_status "Directory needs restructuring, but script not found"
+        print_status "   Run restructure manually from parent directory if needed"
+        print_warning "   cd .. && python3 restructure_output_train.py"
+    fi
 else
-    print_warning "⚠️ Directory restructuring had issues, continuing..."
+    print_status "📁 Creating output_train directory..."
+    mkdir -p ../output_train
+    print_status "✅ Created output_train directory"
 fi
 
 # Setup database for monitoring
@@ -324,8 +332,7 @@ COPY structured_api.py .
 # Also copy original for compatibility
 COPY quantconnect_api.py .
 
-# Copy restructuring script
-COPY ../restructure_output_train.py ../
+# Restructuring script removed - structure already organized
 
 # Create necessary directories
 RUN mkdir -p /app/output_train /app/state /app/logs
