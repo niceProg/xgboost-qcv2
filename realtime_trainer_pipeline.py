@@ -274,9 +274,13 @@ class RealtimeTrainerPipeline:
                 'interval': '1h'        # From config
             }
 
-            # Save to database
-            db_storage.store_training_history(training_data)
-            logger.info("✅ Training history saved to database")
+            # Save to database with fallback for missing method
+            if hasattr(db_storage, 'store_training_history'):
+                db_storage.store_training_history(training_data)
+                logger.info("✅ Training history saved to database")
+            else:
+                logger.warning("⚠️ DatabaseStorage missing store_training_history; skipping history persistence")
+                logger.info("   Training completed successfully (history persistence disabled)")
 
         except Exception as e:
             logger.warning(f"⚠️ Could not save training history to database: {e}")

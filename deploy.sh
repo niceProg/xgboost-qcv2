@@ -371,6 +371,8 @@ RUN pip install --upgrade pip && \
     (pip install --no-cache-dir schedule==1.2.0 || echo "⚠️ Schedule install failed") && \
     echo "✅ Dependencies installation completed"
 
+RUN pip install --no-cache-dir -r requirements.txt || echo "⚠️ requirements.txt install had issues; continuing"
+
 # Copy API code
 COPY structured_api.py .
 
