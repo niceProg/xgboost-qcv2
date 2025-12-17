@@ -197,8 +197,6 @@ print_header "Step 6: Creating Docker Configuration"
 echo ""
 
 cat > docker-compose.yml << EOF
-version: '3.8'
-
 services:
   # FastAPI Server for QuantConnect Integration
   quantconnect-api:

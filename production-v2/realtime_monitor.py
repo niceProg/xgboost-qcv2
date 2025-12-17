@@ -37,6 +37,16 @@ class RealtimeDatabaseMonitor:
         self.config_file = config_file or './config/realtime_config.json'
         self.state_file = './state/last_processed.json'
 
+        # Tables to monitor - Define BEFORE loading state
+        self.tables = [
+            'cg_spot_price_history',
+            'cg_funding_rate_history',
+            'cg_futures_basis_history',
+            'cg_spot_aggregated_taker_volume_history',
+            'cg_long_short_global_account_ratio_history',
+            'cg_long_short_top_account_ratio_history'
+        ]
+
         # Database configuration
         self.db_config = {
             'host': os.getenv('TRADING_DB_HOST', 'localhost'),
@@ -50,16 +60,6 @@ class RealtimeDatabaseMonitor:
         # Monitoring configuration
         self.config = self.load_config()
         self.state = self.load_state()
-
-        # Tables to monitor
-        self.tables = [
-            'cg_spot_price_history',
-            'cg_funding_rate_history',
-            'cg_futures_basis_history',
-            'cg_spot_aggregated_taker_volume_history',
-            'cg_long_short_global_account_ratio_history',
-            'cg_long_short_top_account_ratio_history'
-        ]
 
         # Smart table configurations - based on created_at
         self.table_configs = {

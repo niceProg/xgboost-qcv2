@@ -255,7 +255,7 @@ class RealtimeTrainerPipeline:
                 # Skip if we trained recently (within last hour) and no trigger
                 time_since_last = datetime.now() - last_training
                 if time_since_last < timedelta(hours=1):
-                    logger.info(f"⏭️ Skipping training - last run {time_since_last ago}")
+                    logger.info(f"⏭️ Skipping training - last run {time_since_last} ago")
                     return True
 
         try:
