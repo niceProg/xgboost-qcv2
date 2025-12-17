@@ -502,17 +502,43 @@ class RealtimeDatabaseMonitor:
             total_records = sum(data['new_count'] for data in new_data_list)
             tables = ', '.join([data['table'] for data in new_data_list])
 
+            import pytz
+
+            # Convert to WIB (UTC+7)
+            jakarta_tz = pytz.timezone('Asia/Jakarta')
+            now_wib = datetime.now(jakarta_tz)
+
+            # Format table names untuk lebih readable
+            table_names = {
+                'cg_spot_price_history': 'Spot Price',
+                'cg_funding_rate_history': 'Funding Rate',
+                'cg_futures_basis_history': 'Futures Basis',
+                'cg_spot_aggregated_taker_volume_history': 'Taker Volume',
+                'cg_long_short_global_account_ratio_history': 'Global L/S Ratio',
+                'cg_long_short_top_account_ratio_history': 'Top L/S Ratio'
+            }
+
+            # Extract unique table names yang punya data baru
+            tables_with_data = list(set([data['table'] for data in new_data_list]))
+            readable_tables = ', '.join([table_names.get(table, table) for table in tables_with_data])
+
             message = f"""
-📊 **New 2025 Data Detected!**
+📊 New 2025 Data Detected!
 
-📈 Total New Records: {total_records}
-📊 Tables: {tables}
-⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+📈 Total New Records: {total_records:,}
+📊 Tables: {readable_tables}
+⏰ Time: {now_wib.strftime('%d-%m-%Y %H:%M:%S')} WIB
 
-🔄 **Action:** Real-time training triggered
-⚡ **Status:** Model will be updated automatically
+Action: Real-time training triggered
+Status: Model will be updated automatically
+Models: Will be saved to ./output_train/models/
+Performance: Check ./logs/ for detailed metrics
 
-🤖 *XGBoost Real-time Monitor*
+Table Breakdown:
+""" + '\n'.join([f"• {table_names.get(data['table'], data['table'])}: {data['new_count']:,} records ({data.get('priority', 'UNKNOWN')})"
+                 for data in new_data_list])
+
+🤖 XGBoost Real-time Monitor
             """
 
             # Send Telegram notification if configured

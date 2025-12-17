@@ -252,6 +252,36 @@ class RealtimeTrainerPipeline:
         except Exception as e:
             logger.error(f"❌ Error logging training result: {e}")
 
+    def save_training_history_to_db(self, success: bool, trigger_data: Optional[Dict] = None):
+        """Save training history to database for analytics."""
+        try:
+            # Import database storage if available
+            from database_storage import DatabaseStorage
+
+            db_storage = DatabaseStorage()
+
+            # Prepare training data
+            training_data = {
+                'training_timestamp': datetime.now().isoformat(),
+                'success': success,
+                'pipeline_type': 'CORE_6_STEP',
+                'trigger_reason': trigger_data.get('trigger_reason', 'automatic') if trigger_data else 'automatic',
+                'tables_with_new_data': trigger_data.get('tables_with_new_data', []) if trigger_data else [],
+                'models_created': len(list(self.models_dir.glob('*.joblib'))) if success else 0,
+                'mode': 'incremental',
+                'exchange': 'binance',  # From config
+                'pair': 'BTCUSDT',      # From config
+                'interval': '1h'        # From config
+            }
+
+            # Save to database
+            db_storage.store_training_history(training_data)
+            logger.info("✅ Training history saved to database")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Could not save training history to database: {e}")
+            # Continue without database storage - not critical
+
     def run_training(self, mode: str = 'incremental') -> bool:
         """
         Main training execution method
@@ -291,12 +321,16 @@ class RealtimeTrainerPipeline:
             # Log training result
             self.log_training_result(success, trigger_data)
 
+            # Save to database
+            self.save_training_history_to_db(success, trigger_data)
+
             return success
 
         except Exception as e:
             logger.error(f"❌ Real-time training failed: {e}")
             self.update_training_status(False, trigger_data)
             self.log_training_result(False, trigger_data)
+            self.save_training_history_to_db(False, trigger_data)
             return False
 
 def main():
