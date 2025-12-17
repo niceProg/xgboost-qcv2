@@ -125,8 +125,7 @@ class RealtimeTrainerPipeline:
                     "python3", script,
                     "--exchange", exchange,
                     "--pair", pair,
-                    "--interval", interval,
-                    "--output-dir", str(self.output_dir.absolute())
+                    "--interval", interval
                 ]
 
                 logger.info(f"🏃 Running: {' '.join(cmd)}")
@@ -138,6 +137,12 @@ class RealtimeTrainerPipeline:
                 if incremental and script in ['load_database.py', 'xgboost_trainer.py']:
                     cmd.extend(["--incremental"])
                     logger.info(f"🔄 Added incremental flag")
+
+                # Add real-time minutes filter for load_database
+                if incremental and script == 'load_database.py':
+                    # Add minutes filter for real-time updates (last 1-5 minutes)
+                    cmd.extend(["--minutes", "1"])  # Last 1 minute for real-time data
+                    logger.info(f"⚡ Added real-time filter: --minutes 1")
 
                 logger.info(f"🏃 Final command: {' '.join(cmd)}")
 
@@ -254,25 +259,15 @@ class RealtimeTrainerPipeline:
         # Load trigger data if available
         trigger_data = self.load_trigger_data()
 
-        # Real-time check: Always run if there's trigger data OR check for new data
+        # Real-time: Always run training to check for new data
         if mode == 'incremental':
             last_training = self.get_last_training_time()
 
-            # Always proceed if trigger data exists
+            # Always proceed - real-time means checking for new data each time
             if trigger_data:
                 logger.info(f"🚀 Training triggered by new data: {trigger_data.get('tables_with_new_data', [])}")
-
-            # If no trigger, check if enough time has passed for periodic check
-            elif last_training:
-                time_since_last = datetime.now() - last_training
-                # Allow more frequent checks - every 15 minutes instead of 1 hour
-                if time_since_last < timedelta(minutes=15):
-                    logger.info(f"⏭️ Skipping frequent check - last run {time_since_last} ago (next check in 15 min)")
-                    return True
-                else:
-                    logger.info(f"🔄 Periodic check - last run {time_since_last} ago")
             else:
-                logger.info("🆕 No previous training found - running initial check")
+                logger.info(f"🔍 Checking for new data (last run: {datetime.now() - last_training if last_training else 'Never'})")
 
         try:
             # Run CORE pipeline (this integrates with 6 core files)

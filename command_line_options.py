@@ -57,6 +57,12 @@ Examples:
     )
 
     parser.add_argument(
+        '--minutes',
+        type=int,
+        help='Number of recent minutes to include for real-time updates'
+    )
+
+    parser.add_argument(
         '--days',
         type=int,
         help='Number of recent days to include'
@@ -99,7 +105,12 @@ class DataFilter:
         self.interval_filter = self._parse_comma_list(args.interval) if args.interval else None
         self.time_range = self._parse_time_range(args.time) if args.time else None
         self.days_filter = args.days
+        self.minutes_filter = args.minutes  # New: minutes filter for real-time
         self.mode = args.mode
+
+        # Process minutes filter into time_range
+        if self.minutes_filter and not self.time_range:
+            self.time_range = self._get_minutes_time_range(self.minutes_filter)
 
     def _parse_comma_list(self, comma_str: str) -> List[str]:
         """Parse comma-separated list into list of strings."""
@@ -121,6 +132,13 @@ class DataFilter:
             end_dt = datetime.datetime.now(datetime.timezone.utc)
             return (int(start_dt.timestamp() * 1000), int(end_dt.timestamp() * 1000))
         return None
+
+    def _get_minutes_time_range(self, minutes: int) -> tuple:
+        """Get time range for the last N minutes for real-time updates."""
+        import datetime
+        now = datetime.datetime.now(datetime.timezone.utc)
+        start_time = now - datetime.timedelta(minutes=minutes)
+        return (int(start_time.timestamp() * 1000), int(now.timestamp() * 1000))
 
     def _parse_time_range(self, time_str: str) -> tuple:
         """Parse time range string into (start_time, end_time) tuple."""
@@ -253,14 +271,9 @@ class DataFilter:
         if self.interval_filter:
             print(f"Interval(s): {', '.join(self.interval_filter)}")
 
-        # Show time range based on mode
-        time_range = self.get_daily_time_filter()
-        if time_range:
-            start_time, end_time = time_range
-            import datetime
-            start_dt = datetime.datetime.fromtimestamp(start_time/1000)
-            end_dt = datetime.datetime.fromtimestamp(end_time/1000)
-            print(f"Time Range: {start_dt} to {end_dt}")
+        # Show time range based on filter
+        if self.minutes_filter:
+            print(f"Time Filter: Last {self.minutes_filter} minutes (Real-time)")
         elif self.time_range:
             start_time, end_time = self.time_range
             if start_time:
@@ -270,8 +283,19 @@ class DataFilter:
             if end_time:
                 end_dt = datetime.datetime.fromtimestamp(end_time/1000)
                 print(f"End time: {end_dt} ({end_time})")
+        else:
+            # Show time range based on mode
+            time_range = self.get_daily_time_filter()
+            if time_range:
+                start_time, end_time = time_range
+                import datetime
+                start_dt = datetime.datetime.fromtimestamp(start_time/1000)
+                end_dt = datetime.datetime.fromtimestamp(end_time/1000)
+                print(f"Time Range: {start_dt} to {end_dt}")
         if self.days_filter:
             print(f"Days: {self.days_filter}")
+        if self.minutes_filter:
+            print(f"Minutes: {self.minutes_filter}")
         print("=" * 20)
 
 def validate_arguments(args):
