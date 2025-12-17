@@ -79,6 +79,30 @@ CMD ["python", "realtime_monitor.py", "--tables", "all"]
 CMD ["python", "realtime_trainer_pipeline.py", "--mode", "incremental"]
 ```
 
+### 6. ✅ **Fixed Docker Build Dependencies Timing**
+**Problem**: `requirements.container.txt` dibuat terlambat, tidak tersedia saat Docker build
+```
+❌ ERROR: "/requirements.container.txt": not found
+```
+
+**Solution**: Prepare requirements file SEBELUM Docker compose creation
+```bash
+# FIXED: Create requirements file BEFORE Docker build
+if [ -f "requirements.txt" ]; then
+    cp requirements.txt requirements.container.txt  # Line 316
+fi
+
+# Create Dockerfiles AFTER requirements file ready (Line 324)
+cat > Dockerfile.* << 'EOF'
+...
+COPY requirements.container.txt requirements.txt  # ✅ File exists!
+...
+
+# Clean up AFTER build complete (Line 454)
+docker-compose up -d
+rm -f requirements.container.txt  # ✅ Safe cleanup
+```
+
 ## 📊 Container Architecture - FIXED:
 
 ```
@@ -119,6 +143,7 @@ CMD ["python", "realtime_trainer_pipeline.py", "--mode", "incremental"]
 - ❌ `Timezone inconsistency` → ✅ TZ=Asia/Jakarta
 - ❌ `database_storage not found` → ✅ Module available
 - ❌ `Command execution failed` → ✅ Proper commands
+- ❌ `requirements.container.txt not found` → ✅ File created before build
 
 ### ✅ **Successful Deployment**:
 - 🐳 **3 Containers running** smoothly
@@ -155,5 +180,6 @@ curl http://localhost:8000/training/status
 
 ---
 *Generated: 2025-12-18*
-*Fixed Issues: 5/5*
+*Fixed Issues: 6/6*
 *Status: ✅ Ready for Docker Deployment*
+*Last Fix: Docker build dependencies timing*

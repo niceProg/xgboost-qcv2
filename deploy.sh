@@ -309,6 +309,16 @@ EOF
 
 print_status "✅ Docker Compose configuration created"
 
+# Prepare requirements for containers (MUST be done BEFORE Docker build)
+print_status "Preparing requirements for containers..."
+if [ -f "requirements.txt" ]; then
+    print_status "✅ Using existing requirements.txt for container consistency"
+    cp requirements.txt requirements.container.txt
+else
+    print_error "❌ requirements.txt not found!"
+    exit 1
+fi
+
 # Create Dockerfiles
 print_status "Creating Dockerfiles..."
 
@@ -427,21 +437,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 CMD ["python", "realtime_trainer_pipeline.py", "--mode", "incremental"]
 EOF
 
-# Requirements - COPY existing requirements.txt untuk consistency
-if [ -f "requirements.txt" ]; then
-    print_status "✅ Using existing requirements.txt for container consistency"
-    cp requirements.txt requirements.container.txt
-else
-    print_error "❌ requirements.txt not found!"
-    exit 1
-fi
-
-print_status "✅ Dockerfiles and requirements created"
-
-# Clean up temporary requirements file
-rm -f requirements.container.txt
-
-print_status "✅ Temporary files cleaned up"
+print_status "✅ Dockerfiles created"
 echo ""
 
 # Build and start containers
@@ -453,6 +449,10 @@ docker-compose build
 
 print_status "Starting containers..."
 docker-compose up -d
+
+# Clean up temporary requirements file AFTER build complete
+rm -f requirements.container.txt
+print_status "✅ Temporary files cleaned up"
 
 # Wait for services
 print_status "Waiting for services to start..."
