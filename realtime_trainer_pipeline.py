@@ -98,10 +98,10 @@ class RealtimeTrainerPipeline:
         logger.info("🔥 Starting CORE training pipeline")
         logger.info("📋 Step 1: load_database.py")
 
-        # Core pipeline configuration
+        # Core pipeline configuration - BTCUSDT only, 1h interval
         exchange = os.getenv('EXCHANGE', 'binance')
-        pair = os.getenv('PAIR', 'BTCUSDT,ETHUSDT')
-        interval = os.getenv('INTERVAL', '1h,4h')
+        pair = os.getenv('PAIR', 'BTCUSDT')  # Only BTCUSDT
+        interval = os.getenv('INTERVAL', '1h')  # Only 1h
 
         core_scripts = [
             ("load_database.py", "Load Database (Market Data)"),
@@ -137,10 +137,9 @@ class RealtimeTrainerPipeline:
                 logger.info(f"📄 Script path: {script}")
                 logger.info(f"📁 Script exists: {Path(script).exists()}")
 
-                # Add incremental mode for specific scripts
-                if incremental and script in ['load_database.py', 'xgboost_trainer.py']:
-                    cmd.extend(["--incremental"])
-                    logger.info(f"🔄 Added incremental flag")
+                # Note: Core scripts don't support --incremental flag
+                # They use different logic for incremental updates
+                # We'll handle incremental mode through minutes filtering instead
 
                 # Add real-time minutes filter for load_database
                 if incremental and script == 'load_database.py':
