@@ -163,10 +163,14 @@ class RealtimeDatabaseMonitor:
 
     def is_business_hours(self) -> bool:
         """Check if current time is during active trading hours."""
-        now = datetime.now()
+        import pytz
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+        now = datetime.now(jakarta_tz)
+        # Convert to UTC for business hours calculation
+        utc_now = now.astimezone(pytz.UTC)
         # Major crypto market active hours (UTC)
         # 9:00 AM - 11:59 PM UTC covers most global markets
-        return 9 <= now.hour <= 23
+        return 9 <= utc_now.hour <= 23
 
     def get_adaptive_check_interval(self, table: str) -> int:
         """Calculate optimal check interval based on activity patterns."""
@@ -770,18 +774,24 @@ Table Breakdown:
 
     def run_monitor(self):
         """Smart main monitoring loop with adaptive intervals."""
+        import pytz
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
         logger.info("🚀 Starting Smart Real-time Database Monitor")
         logger.info(f"📊 Monitoring {len(self.tables)} tables for {self.config['focus_year']} data")
         logger.info(f"🔔 Notifications: {'Enabled' if self.config['notification']['enabled'] else 'Disabled'}")
-        logger.info(f"⏰ Current time: {datetime.now()} (Business hours: {self.is_business_hours()})")
+        logger.info(f"⏰ Current time: {datetime.now(jakarta_tz)} (Business hours: {self.is_business_hours()})")
 
         self.running = True
         cycle_count = 0
 
+              # Import timezone for consistency in the main loop
+        import pytz
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+
         while self.running:
             try:
                 cycle_count += 1
-                cycle_start = datetime.now()
+                cycle_start = datetime.now(jakarta_tz)
 
                 # Log efficiency report every 10 cycles
                 if cycle_count % 10 == 0:
@@ -795,8 +805,9 @@ Table Breakdown:
                 self.check_all_tables()
 
                 # Adaptive sleep: shorter sleep when data is active, longer when quiet
+                current_time = datetime.now(jakarta_tz)
                 active_tables = sum(1 for t in self.tables if self.table_activity[t].get('last_data_found') and
-                                  (datetime.now() - self.table_activity[t]['last_data_found']).total_seconds() < 300)
+                                  (current_time - self.table_activity[t]['last_data_found']).total_seconds() < 300)
 
                 if active_tables > 0:
                     sleep_time = 15  # Check every 15 seconds when active
@@ -809,7 +820,7 @@ Table Breakdown:
                     logger.debug(f"🌙 Quiet hours: sleeping {sleep_time}s")
 
                 # Calculate cycle time
-                cycle_time = (datetime.now() - cycle_start).total_seconds()
+                cycle_time = (datetime.now(jakarta_tz) - cycle_start).total_seconds()
                 if cycle_time > 10:  # Warn if cycle takes too long
                     logger.warning(f"⚠️ Long monitoring cycle: {cycle_time:.1f}s")
 
