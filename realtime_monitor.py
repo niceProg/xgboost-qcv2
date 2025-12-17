@@ -365,10 +365,10 @@ class RealtimeDatabaseMonitor:
                 recent_count = result[3] if result[3] else 0
                 if recent_count > 0:
                     priority = "HIGH_PRIORITY"  # Recent data = high priority
-                elif result[0] >= config['urgent_threshold']:
+                elif result[0] >= table_config['urgent_threshold']:
                     priority = "URGENT"
-                elif result[0] >= config['min_new_records']:
-                    priority = config['priority']
+                elif result[0] >= table_config['min_new_records']:
+                    priority = table_config['priority']
                 else:
                     priority = "LOW"
 

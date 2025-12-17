@@ -133,3 +133,58 @@
 2025-12-17 18:52:30,254 - INFO - 📱 Telegram notification sent
 2025-12-17 18:52:30,254 - INFO - ✅ Updated last_processed timestamps
 2025-12-17 18:52:30,259 - INFO - Test completed: Found new data
+2025-12-17 19:03:17,742 - INFO - ✅ Connected to database: newera
+2025-12-17 19:03:17,767 - INFO - 📊 New data in cg_spot_price_history: 22 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:03:17,767 - INFO -    Time range: 1765972320000 to 1765972920000
+2025-12-17 19:03:17,767 - INFO -    Recent records: 12
+2025-12-17 19:03:17,767 - INFO -    Reason: Minimum threshold met: 22 >= 5
+2025-12-17 19:03:30,277 - INFO - ✅ Connected to database: newera
+2025-12-17 19:04:29,316 - INFO - ✅ Connected to database: newera
+2025-12-17 19:04:29,342 - INFO - 📊 New data in cg_spot_price_history: 24 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:29,342 - INFO -    Time range: 1765972320000 to 1765972980000
+2025-12-17 19:04:29,342 - INFO -    Recent records: 13
+2025-12-17 19:04:29,342 - INFO -    Reason: Minimum threshold met: 24 >= 5
+2025-12-17 19:04:29,368 - INFO - 📊 New data in cg_spot_price_history: 24 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:29,368 - INFO -    Time range: 1765972320000 to 1765972980000
+2025-12-17 19:04:29,368 - INFO -    Recent records: 13
+2025-12-17 19:04:29,368 - INFO -    Reason: Minimum threshold met: 24 >= 5
+2025-12-17 19:04:29,394 - INFO - 📊 New data in cg_spot_price_history: 24 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:29,394 - INFO -    Time range: 1765972320000 to 1765972980000
+2025-12-17 19:04:29,394 - INFO -    Recent records: 13
+2025-12-17 19:04:29,394 - INFO -    Reason: Minimum threshold met: 24 >= 5
+2025-12-17 19:04:40,116 - INFO - 🚀 Starting Smart Real-time Database Monitor
+2025-12-17 19:04:40,116 - INFO - 📊 Monitoring 6 tables for 2025 data
+2025-12-17 19:04:40,116 - INFO - 🔔 Notifications: Enabled
+2025-12-17 19:04:40,116 - INFO - ⏰ Current time: 2025-12-17 19:04:40.116540 (Business hours: True)
+2025-12-17 19:04:40,237 - INFO - ✅ Connected to database: newera
+2025-12-17 19:04:40,286 - INFO - 📊 New data in cg_spot_price_history: 24 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:40,286 - INFO -    Time range: 1765972320000 to 1765972980000
+2025-12-17 19:04:40,286 - INFO -    Recent records: 13
+2025-12-17 19:04:40,286 - INFO -    Reason: Minimum threshold met: 24 >= 5
+2025-12-17 19:04:40,334 - INFO - 📊 New data in cg_funding_rate_history: 24 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:40,334 - INFO -    Time range: 1765972380000 to 1765973040000
+2025-12-17 19:04:40,334 - INFO -    Recent records: 21
+2025-12-17 19:04:40,335 - INFO -    Reason: Minimum threshold met: 24 >= 3
+2025-12-17 19:04:40,359 - WARNING - 🚨 URGENT: 18 new records in cg_futures_basis_history within 2 minutes!
+2025-12-17 19:04:40,359 - INFO - 🚨 Urgent condition detected for cg_futures_basis_history
+2025-12-17 19:04:40,384 - INFO - 📊 New data in cg_futures_basis_history: 144 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:40,384 - INFO -    Time range: 1765972380000 to 1765973040000
+2025-12-17 19:04:40,384 - INFO -    Recent records: 126
+2025-12-17 19:04:40,384 - INFO -    Reason: Minimum threshold met: 144 >= 3
+2025-12-17 19:04:40,433 - INFO - 📊 New data in cg_spot_aggregated_taker_volume_history: 132 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:40,434 - INFO -    Time range: 1765972380000 to 1765973040000
+2025-12-17 19:04:40,434 - INFO -    Recent records: 72
+2025-12-17 19:04:40,434 - INFO -    Reason: Minimum threshold met: 132 >= 5
+2025-12-17 19:04:40,482 - INFO - 📊 New data in cg_long_short_global_account_ratio_history: 24 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:40,482 - INFO -    Time range: 1765972380000 to 1765973040000
+2025-12-17 19:04:40,482 - INFO -    Recent records: 24
+2025-12-17 19:04:40,482 - INFO -    Reason: Minimum threshold met: 24 >= 2
+2025-12-17 19:04:40,531 - INFO - 📊 New data in cg_long_short_top_account_ratio_history: 24 records (Priority: HIGH_PRIORITY)
+2025-12-17 19:04:40,531 - INFO -    Time range: 1765972380000 to 1765973040000
+2025-12-17 19:04:40,531 - INFO -    Recent records: 24
+2025-12-17 19:04:40,531 - INFO -    Reason: Minimum threshold met: 24 >= 2
+2025-12-17 19:04:40,531 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
+2025-12-17 19:04:40,531 - INFO - 🎯 Training trigger priority order: ['cg_spot_price_history(HIGH_PRIORITY)', 'cg_funding_rate_history(HIGH_PRIORITY)', 'cg_futures_basis_history(HIGH_PRIORITY)', 'cg_spot_aggregated_taker_volume_history(HIGH_PRIORITY)', 'cg_long_short_global_account_ratio_history(HIGH_PRIORITY)', 'cg_long_short_top_account_ratio_history(HIGH_PRIORITY)']
+2025-12-17 19:04:40,532 - INFO - 🚀 Triggered real-time training for 6 tables
+2025-12-17 19:04:41,570 - INFO - 📱 Telegram notification sent
+2025-12-17 19:04:41,570 - INFO - ✅ Updated last_processed timestamps
