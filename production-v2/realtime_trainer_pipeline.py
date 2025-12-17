@@ -120,13 +120,13 @@ class RealtimeTrainerPipeline:
             for step_num, (script, description) in enumerate(core_scripts, 1):
                 logger.info(f"🔧 Step {step_num}: {description}")
 
-                # Build command
+                # Build command with absolute paths
                 cmd = [
-                    "python3", script,
+                    "python3", str(Path(parent_dir) / script),
                     "--exchange", exchange,
                     "--pair", pair,
                     "--interval", interval,
-                    "--output-dir", str(self.output_dir)
+                    "--output-dir", str(self.output_dir.absolute())
                 ]
 
                 # Add incremental mode for specific scripts

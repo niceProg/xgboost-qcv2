@@ -263,6 +263,10 @@ services:
       # Focus on 2025 data
       focus_year: 2025
 
+      # Telegram notifications
+      TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
+
     volumes:
       - ../output_train:/app/output_train
       - ../state:/app/state
@@ -289,6 +293,10 @@ services:
 
       # Training Configuration
       PERFORMANCE_THRESHOLD: \${PERFORMANCE_THRESHOLD:-0.6}
+
+      # Telegram notifications
+      TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
 
     volumes:
       - ../output_train:/app/output_train

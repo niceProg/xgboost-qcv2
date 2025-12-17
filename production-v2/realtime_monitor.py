@@ -212,11 +212,11 @@ class RealtimeDatabaseMonitor:
             cursor = self.connection.cursor()
             config = self.table_configs[table]
 
-            # Quick check for recent high-volume data
+            # Quick check for recent high-volume data (MariaDB compatible)
             urgent_query = f"""
             SELECT COUNT(*) as recent_count,
                    MAX({config['created_col']}) as latest_created,
-                   EXTRACT(EPOCH FROM (NOW() - MAX({config['created_col']}))) as seconds_ago
+                   TIMESTAMPDIFF(SECOND, MAX({config['created_col']}), NOW()) as seconds_ago
             FROM {table}
             WHERE {config['created_col']} >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
             AND exchange IN %s
@@ -330,14 +330,14 @@ class RealtimeDatabaseMonitor:
             # Focus on 2025 data
             focus_start = datetime(self.config['focus_year'], 1, 1, 0, 0, 0)
 
-            # Smart query using created_at for efficiency
+            # Smart query using created_at for efficiency (MariaDB compatible)
             query = f"""
             SELECT
                 COUNT(*) as count,
                 MAX({time_col}) as max_time,
                 MIN({time_col}) as min_time,
                 MAX({created_col}) as latest_created,
-                EXTRACT(EPOCH FROM (NOW() - MAX({created_col}))) as seconds_since_creation,
+                TIMESTAMPDIFF(SECOND, MAX({created_col}), NOW()) as seconds_since_creation,
                 COUNT(CASE WHEN {created_col} >= DATE_SUB(NOW(), INTERVAL 1 HOUR) THEN 1 END) as recent_count
             FROM {table}
             WHERE {time_col} > '{last_processed.isoformat()}'
