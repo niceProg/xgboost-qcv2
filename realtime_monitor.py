@@ -133,6 +133,11 @@ class RealtimeDatabaseMonitor:
         self.table_activity = {}  # Track activity patterns
         self.adaptive_intervals = {}  # Dynamic check intervals
 
+        # Notification tracking (no artificial limits)
+        self.last_notification_time = None
+        self.notification_count = 0
+        self.rate_limit_hits = 0  # Track when we hit Telegram rate limits
+
         # Status
         self.running = False
         self.connection = None
@@ -494,15 +499,18 @@ class RealtimeDatabaseMonitor:
             logger.error(f"Error updating last_processed: {e}")
 
     def send_notification(self, new_data_list: List[Dict]):
-        """Send notification about new data detection."""
+        """Send notification about new data detection (no artificial limits)."""
         if not self.config['notification']['enabled']:
             return
 
+        current_time = datetime.now()
+
         try:
             total_records = sum(data['new_count'] for data in new_data_list)
-            tables = ', '.join([data['table'] for data in new_data_list])
 
             import pytz
+            import time
+            import hashlib
 
             # Convert to WIB (UTC+7)
             jakarta_tz = pytz.timezone('Asia/Jakarta')
@@ -522,7 +530,11 @@ class RealtimeDatabaseMonitor:
             tables_with_data = list(set([data['table'] for data in new_data_list]))
             readable_tables = ', '.join([table_names.get(table, table) for table in tables_with_data])
 
-            message = f"""📊 New 2025 Data Detected!
+            # Create unique hash untuk avoid duplicate content
+            content_hash = hashlib.md5(f"{total_records}_{readable_tables}_{now_wib.strftime('%H%M')}".encode()).hexdigest()[:8]
+
+            # Create unique message with hash and timestamp
+            message = f"""📊 New 2025 Data Detected! [#{content_hash}]
 
 📈 Total New Records: {total_records:,}
 📊 Tables: {readable_tables}
@@ -537,7 +549,8 @@ Table Breakdown:
 """ + '\n'.join([f"• {table_names.get(data['table'], data['table'])}: {data['new_count']:,} records ({data.get('priority', 'UNKNOWN')})"
                  for data in new_data_list]) + f"""
 
-🤖 XGBoost Real-time Monitor"""
+🤖 XGBoost Real-time Monitor
+🔔 Notification #{self.notification_count + 1} | ID: {content_hash}"""
 
             # Send Telegram notification if configured
             telegram_token = self.config['notification']['telegram_token']
@@ -545,14 +558,43 @@ Table Breakdown:
 
             if telegram_token and telegram_chat_id:
                 import requests
+
                 url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
                 payload = {
                     'chat_id': telegram_chat_id,
-                    'text': message,
-                    'parse_mode': 'Markdown'
+                    'text': message
+                    # Removed parse_mode to avoid Markdown parsing errors
                 }
-                requests.post(url, json=payload)
-                logger.info("📱 Telegram notification sent")
+
+                response = requests.post(url, json=payload, timeout=10)
+
+                if response.status_code == 200:
+                    # Update notification tracking
+                    self.last_notification_time = current_time
+                    self.notification_count += 1
+                    logger.info(f"📱 Telegram notification sent successfully (#{self.notification_count})")
+
+                elif response.status_code == 429:
+                    # Rate limit hit!
+                    self.rate_limit_hits += 1
+                    error_data = response.json()
+                    retry_after = error_data.get('parameters', {}).get('retry_after', 60)
+
+                    logger.error(f"⛔ TELEGRAM RATE LIMIT HIT!")
+                    logger.error(f"📊 Notification #{self.notification_count + 1} blocked")
+                    logger.error(f"⏰ Retry after: {retry_after} seconds")
+                    logger.error(f"📈 Total rate limit hits: {self.rate_limit_hits}")
+
+                elif response.status_code == 400:
+                    # Bad Request - likely content issue
+                    error_data = response.json()
+                    logger.error(f"❌ Telegram Bad Request: {error_data.get('description')}")
+
+                else:
+                    # Other API errors
+                    logger.error(f"❌ Telegram API error: {response.status_code} - {response.text}")
+                    if response.status_code >= 500:
+                        logger.error("🔄 This is a Telegram server error, notification may arrive later")
 
         except Exception as e:
             logger.error(f"Error sending notification: {e}")
