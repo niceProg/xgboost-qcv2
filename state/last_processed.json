@@ -1,10 +1,10 @@
 {
   "last_processed": {
-    "cg_spot_price_history": 1765973820000,
-    "cg_funding_rate_history": 1765973820000,
-    "cg_futures_basis_history": 1765973820000,
-    "cg_spot_aggregated_taker_volume_history": 1765973820000,
-    "cg_long_short_global_account_ratio_history": 1765973880000,
-    "cg_long_short_top_account_ratio_history": 1765973820000
+    "cg_spot_price_history": 1765974240000,
+    "cg_funding_rate_history": 1765974240000,
+    "cg_futures_basis_history": 1765974300000,
+    "cg_spot_aggregated_taker_volume_history": 1765974240000,
+    "cg_long_short_global_account_ratio_history": 1765974240000,
+    "cg_long_short_top_account_ratio_history": 1765974240000
   }
 }
