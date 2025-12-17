@@ -174,3 +174,82 @@ Minutes: 1
 2025-12-17 17:51:47,097 - INFO - 📊 Pipeline: CORE 6-Step
 2025-12-17 17:51:47,097 - INFO - 📁 Models: 3 files created
 2025-12-17 17:51:47,097 - INFO - 🎉 Training completed successfully!
+2025-12-18 03:44:46,462 - INFO - 🤖 Real-time XGBoost Trainer (CORE Pipeline Integration)
+2025-12-18 03:44:46,462 - INFO - ============================================================
+2025-12-18 03:44:46,463 - INFO - 🚀 Real-time trainer initialized
+2025-12-18 03:44:46,463 - INFO - 📁 Output directory: output_train
+2025-12-18 03:44:46,463 - INFO - 🤖 Using CORE pipeline (6 steps)
+2025-12-18 03:44:46,463 - INFO - 🚀 Starting real-time training (mode: incremental)
+2025-12-18 03:44:46,463 - INFO - 📋 Loaded trigger: new_data_arrival
+2025-12-18 03:44:46,463 - INFO - 🚀 Training triggered by new data: ['cg_futures_basis_history']
+2025-12-18 03:44:46,463 - INFO - 🔥 Starting CORE training pipeline
+2025-12-18 03:44:46,463 - INFO - 📋 Step 1: load_database.py
+2025-12-18 03:44:46,463 - INFO - 📂 Scripts directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:44:46,463 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:44:46,464 - INFO - 🔧 Step 1: Load Database (Market Data)
+2025-12-18 03:44:46,464 - INFO - 🏃 Running: python3 load_database.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:46,464 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:44:46,464 - INFO - 📄 Script path: load_database.py
+2025-12-18 03:44:46,464 - INFO - 📁 Script exists: True
+2025-12-18 03:44:46,464 - INFO - ⚡ Added real-time filter: --minutes 1
+2025-12-18 03:44:46,464 - INFO - 🏃 Final command: python3 load_database.py --exchange binance --pair BTCUSDT --interval 1h --minutes 1
+2025-12-18 03:44:53,192 - INFO - ✅ Step 1 completed successfully
+2025-12-18 03:44:53,192 - INFO - 📄 Output: === Active Filters ===
+Mode: initial
+Exchange(s): binance
+Pair(s): BTCUSDT
+Interval(s): 1h
+Time Filter: Last 1 minutes (Real-time)
+Minutes: 1
+====================
+
+2025-12-18 03:44:53,192 - INFO - 🔧 Step 2: Merge Tables
+2025-12-18 03:44:53,192 - INFO - 🏃 Running: python3 merge_7_tables.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:53,192 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:44:53,192 - INFO - 📄 Script path: merge_7_tables.py
+2025-12-18 03:44:53,193 - INFO - 📁 Script exists: True
+2025-12-18 03:44:53,193 - INFO - 🏃 Final command: python3 merge_7_tables.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:55,211 - INFO - ✅ Step 2 completed successfully
+2025-12-18 03:44:55,211 - INFO - 🔧 Step 3: Feature Engineering
+2025-12-18 03:44:55,211 - INFO - 🏃 Running: python3 feature_engineering.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:55,211 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:44:55,211 - INFO - 📄 Script path: feature_engineering.py
+2025-12-18 03:44:55,212 - INFO - 📁 Script exists: True
+2025-12-18 03:44:55,212 - INFO - 🏃 Final command: python3 feature_engineering.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:57,400 - INFO - ✅ Step 3 completed successfully
+2025-12-18 03:44:57,400 - INFO - 🔧 Step 4: Label Building
+2025-12-18 03:44:57,400 - INFO - 🏃 Running: python3 label_builder.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:57,400 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:44:57,401 - INFO - 📄 Script path: label_builder.py
+2025-12-18 03:44:57,401 - INFO - 📁 Script exists: True
+2025-12-18 03:44:57,401 - INFO - 🏃 Final command: python3 label_builder.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:59,364 - INFO - ✅ Step 4 completed successfully
+2025-12-18 03:44:59,364 - INFO - 🔧 Step 5: Model Training
+2025-12-18 03:44:59,365 - INFO - 🏃 Running: python3 xgboost_trainer.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:44:59,365 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:44:59,365 - INFO - 📄 Script path: xgboost_trainer.py
+2025-12-18 03:44:59,365 - INFO - 📁 Script exists: True
+2025-12-18 03:44:59,365 - INFO - 🏃 Final command: python3 xgboost_trainer.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:46:31,508 - INFO - ✅ Step 5 completed successfully
+2025-12-18 03:46:31,508 - INFO - 🔧 Step 6: Model Evaluation
+2025-12-18 03:46:31,508 - INFO - 🏃 Running: python3 model_evaluation_with_leverage.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:46:31,508 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-18 03:46:31,509 - INFO - 📄 Script path: model_evaluation_with_leverage.py
+2025-12-18 03:46:31,509 - INFO - 📁 Script exists: True
+2025-12-18 03:46:31,509 - INFO - 🏃 Final command: python3 model_evaluation_with_leverage.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-18 03:46:36,490 - INFO - ✅ Step 6 completed successfully
+2025-12-18 03:46:36,490 - INFO - 🎉 CORE pipeline completed successfully!
+2025-12-18 03:46:36,491 - INFO - ✅ Found 4 model files:
+2025-12-18 03:46:36,491 - INFO -    📄 latest_model.joblib (0.1 MB)
+2025-12-18 03:46:36,491 - INFO -    📄 xgboost_trading_model_20251218_034629.joblib (0.1 MB)
+2025-12-18 03:46:36,491 - INFO -    📄 xgboost_trading_model_20251217_175139.joblib (0.1 MB)
+2025-12-18 03:46:36,491 - INFO -    📄 xgboost_trading_model_20251217_145809.joblib (0.1 MB)
+2025-12-18 03:46:36,491 - INFO - 🎉 Real-time training completed successfully!
+2025-12-18 03:46:36,492 - INFO - 🧹 Cleaned trigger file
+2025-12-18 03:46:36,492 - INFO - ✅ Training status updated successfully
+2025-12-18 03:46:36,492 - INFO - 🎉 XGBoost Training Completed Successfully!
+2025-12-18 03:46:36,492 - INFO - 📊 Pipeline: CORE 6-Step
+2025-12-18 03:46:36,492 - INFO - 📁 Models: 4 files created
+2025-12-18 03:46:37,187 - INFO - Database initialized successfully
+2025-12-18 03:46:37,187 - WARNING - ⚠️ Could not save training history to database: 'DatabaseStorage' object has no attribute 'store_training_history'
+2025-12-18 03:46:37,187 - INFO - 🎉 Training completed successfully!
