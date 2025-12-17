@@ -53,7 +53,7 @@ production-v2/
 ├──
 ├── 🔥 Core Real-time Components:
 │   ├── realtime_monitor.py        # Smart event-driven monitor
-│   ├── realtime_trainer.py        # Incremental model trainer
+│   ├── realtime_trainer_pipeline.py  # Real-time trainer with CORE pipeline
 │   └── quantconnect_api.py        # FastAPI server
 ├──
 ├── 📄 QuantConnect Integration:
@@ -178,7 +178,7 @@ docker-compose logs -f realtime-trainer      # Trainer logs
 - Smart adaptive checking based on activity patterns
 - Trigger training automatically saat data cukup
 
-### 2. Real-time Trainer (`realtime_trainer.py`)
+### 2. Real-time Trainer (`realtime_trainer_pipeline.py`)
 - Incremental XGBoost training
 - Performance validation
 - Automatic model deployment
