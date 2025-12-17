@@ -253,6 +253,9 @@ services:
       # Focus on 2025 data
       focus_year: 2025
 
+      # Timezone for consistency
+      TZ: Asia/Jakarta
+
       # Telegram notifications
       TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
@@ -284,6 +287,9 @@ services:
       # Training Configuration
       PERFORMANCE_THRESHOLD: \${PERFORMANCE_THRESHOLD:-0.6}
 
+      # Timezone for consistency
+      TZ: Asia/Jakarta
+
       # Telegram notifications
       TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
@@ -306,7 +312,7 @@ print_status "✅ Docker Compose configuration created"
 # Create Dockerfiles
 print_status "Creating Dockerfiles..."
 
-# API Dockerfile
+# API Dockerfile - FIXED: Use consistent requirements and timezone
 cat > Dockerfile.api << 'EOF'
 FROM python:3.9-slim
 
@@ -318,8 +324,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Copy requirements (using existing requirements.txt for consistency)
+COPY requirements.container.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy API code
@@ -328,10 +334,15 @@ COPY structured_api.py .
 # Also copy original for compatibility
 COPY quantconnect_api.py .
 
-# Restructuring script removed - structure already organized
+# Copy database storage for API endpoints
+COPY database_storage.py .
 
 # Create necessary directories
 RUN mkdir -p /app/output_train /app/state /app/logs
+
+# Set timezone for consistency
+ENV TZ=Asia/Jakarta
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Expose port
 EXPOSE 8000
@@ -344,7 +355,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["python", "structured_api.py"]
 EOF
 
-# Monitor Dockerfile
+# Monitor Dockerfile - FIXED: Add database storage and timezone
 cat > Dockerfile.monitor << 'EOF'
 FROM python:3.9-slim
 
@@ -353,23 +364,29 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Copy requirements (using existing requirements.txt for consistency)
+COPY requirements.container.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy monitor code
+# Copy monitor and supporting files - FIX: Missing database_storage
 COPY realtime_monitor.py .
+COPY database_storage.py .
 
 # Create necessary directories
-RUN mkdir -p /app/state /app/logs
+RUN mkdir -p /app/state /app/logs /var/log
 
-# Run monitor
-CMD ["python", "realtime_monitor.py"]
+# Set timezone for consistency with monitor
+ENV TZ=Asia/Jakarta
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Run monitor with proper arguments
+CMD ["python", "realtime_monitor.py", "--tables", "all"]
 EOF
 
-# Trainer Dockerfile
+# Trainer Dockerfile - FIXED: Copy ALL core files
 cat > Dockerfile.trainer << 'EOF'
 FROM python:3.9-slim
 
@@ -383,50 +400,48 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Copy requirements (using existing requirements.txt for consistency)
+COPY requirements.container.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy trainer code
+# Copy ALL core training files - FIX: Missing files error
 COPY realtime_trainer_pipeline.py .
+COPY load_database.py .
+COPY merge_7_tables.py .
+COPY feature_engineering.py .
+COPY label_builder.py .
+COPY xgboost_trainer.py .
+COPY model_evaluation_with_leverage.py .
+COPY database_storage.py .
+COPY command_line_options.py .
 
 # Create necessary directories
 RUN mkdir -p /app/output_train /app/state /app/logs
-
-# Create log directory
 RUN mkdir -p /var/log
+
+# Set timezone for consistency
+ENV TZ=Asia/Jakarta
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Run trainer (will be triggered by monitor)
 CMD ["python", "realtime_trainer_pipeline.py", "--mode", "incremental"]
 EOF
 
-# Requirements
-cat > requirements.txt << 'EOF'
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.4.2
-python-dotenv==1.0.0
-requests==2.31.0
-pandas==2.1.3
-numpy==1.24.3
-scikit-learn==1.3.2
-xgboost==2.0.2
-joblib==1.3.2
-pymysql==1.1.0
-schedule==1.2.0
-python-multipart==0.0.6
-aiofiles==23.2.1
-
-# Core Pipeline Dependencies
-matplotlib==3.7.2
-seaborn==0.12.2
-plotly==5.17.0
-tqdm==4.66.1
-yfinance==0.2.28
-ta==0.10.2  # Alternative to ta-lib, pure Python
-EOF
+# Requirements - COPY existing requirements.txt untuk consistency
+if [ -f "requirements.txt" ]; then
+    print_status "✅ Using existing requirements.txt for container consistency"
+    cp requirements.txt requirements.container.txt
+else
+    print_error "❌ requirements.txt not found!"
+    exit 1
+fi
 
 print_status "✅ Dockerfiles and requirements created"
+
+# Clean up temporary requirements file
+rm -f requirements.container.txt
+
+print_status "✅ Temporary files cleaned up"
 echo ""
 
 # Build and start containers
