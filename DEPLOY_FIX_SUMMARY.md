@@ -131,6 +131,27 @@ RUN pip install --upgrade pip && \
 # Core files akan diverifikasi di runtime, bukan build time
 ```
 
+### 11. ✅ **Fixed Missing Requests Module for Telegram Notifications**
+**Problem**: Telegram notifications gagal karena requests module tidak ada
+```
+❌ Error sending time-based notification: No module named 'requests'
+```
+
+**Solution**: Install SEMUA dependencies dari requirements.txt untuk consistency
+```dockerfile
+# FIXED: Use requirements.txt instead of individual installs (most reliable)
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    echo "✅ All dependencies from requirements.txt installed successfully" && \
+    echo "🔍 Verifying critical notification modules..." && \
+    python3 -c "import requests; print('✅ Requests module available')" && \
+    python3 -c "import schedule; print('✅ Schedule module available')" && \
+    python3 -c "import pytz; print('✅ PyTZ module available')" && \
+    echo "✅ All notification dependencies verified"
+```
+
+**Reasoning**: requests==2.32.5 already exists in requirements.txt, tapi individual install tidak mencakup semua dependencies
+
 ### 8. ✅ **Fixed Missing Schedule Module**
 **Problem**: realtime_monitor.py butuh schedule module tapi tidak diinstall
 ```
@@ -269,6 +290,6 @@ curl http://localhost:8000/training/status
 
 ---
 *Generated: 2025-12-18*
-*Fixed Issues: 10/10*
+*Fixed Issues: 11/11*
 *Status: ✅ Ready for Docker Deployment*
-*Last Fix: store_training_history API mismatch fallback*
+*Last Fix: Missing requests module for Telegram notifications*
