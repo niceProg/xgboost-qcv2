@@ -138,6 +138,10 @@ class RealtimeDatabaseMonitor:
         self.notification_count = 0
         self.rate_limit_hits = 0  # Track when we hit Telegram rate limits
 
+        # Time-based notification settings
+        self.min_notification_interval = 180  # 3 minutes between guaranteed notifications
+        self.last_data_detection_time = None  # Track when we last detected data
+
         # Status
         self.running = False
         self.connection = None
@@ -584,35 +588,38 @@ Table Breakdown:
             logger.error(f"Error sending notification: {e}")
 
     def check_all_tables(self) -> bool:
-        """Smart check all tables for new data using adaptive intervals."""
+        """Check all tables for new data with time-based notification logic."""
         tables_with_new_data = []
         checked_count = 0
         skipped_count = 0
+        has_data_activity = False
+
+        current_time = datetime.now()
 
         for table in self.tables:
-            # Smart check: should we check this table now?
+            # Always check all tables for now
             if self.should_check_table_now(table):
                 checked_count += 1
-                logger.debug(f"🔍 Checking {table} (interval: {self.get_adaptive_check_interval(table)}s)")
+                logger.debug(f"🔍 Checking {table}")
 
                 # Check for new data
                 new_data = self.check_new_data(table)
                 if new_data:
                     tables_with_new_data.append(new_data)
+                    has_data_activity = True
+                    self.last_data_detection_time = current_time
 
                     # If high priority data found, immediately check other priority tables
                     if new_data.get('priority') in ['URGENT', 'HIGH']:
                         logger.info(f"⚡ High priority data in {table}, accelerating other table checks")
                         self.accelerate_other_tables(table)
-            else:
-                skipped_count += 1
-                logger.debug(f"⏭️ Skipping {table} (next check in {self.get_adaptive_check_interval(table) - (datetime.now() - self.table_activity[table]['last_check']).total_seconds():.0f}s)")
 
         # Log monitoring efficiency
         if checked_count > 0 or skipped_count > 0:
             logger.info(f"📊 Monitoring cycle: {checked_count} tables checked, {skipped_count} tables skipped")
 
-        # Prioritize and trigger training if we have new data
+        # ALWAYS trigger training if we have new data
+        training_triggered = False
         if tables_with_new_data:
             # Sort by priority
             tables_with_new_data.sort(key=lambda x: (
@@ -626,15 +633,102 @@ Table Breakdown:
             logger.info(f"🎯 Training trigger priority order: {[d['table'] + '(' + d.get('priority', 'UNKNOWN') + ')' for d in tables_with_new_data]}")
 
             success = self.trigger_training(tables_with_new_data)
-
-            # Save state with updated check times
+            training_triggered = True
             self.save_state()
 
-            return success
+        # TIME-BASED NOTIFICATION: Send periodic notifications even without new data
+        should_send_time_based_notification = False
 
-        # Save state for check times
-        self.save_state()
-        return False
+        if self.last_notification_time:
+            time_since_last_notification = (current_time - self.last_notification_time).total_seconds()
+
+            # Send notification if it's been long enough AND we have recent data activity
+            if time_since_last_notification >= self.min_notification_interval:
+                if self.last_data_detection_time:
+                    time_since_data = (current_time - self.last_data_detection_time).total_seconds()
+                    # Only send time-based notification if data activity was recent (within 10 minutes)
+                    if time_since_data <= 600:  # 10 minutes
+                        should_send_time_based_notification = True
+                        logger.info(f"⏰ Time-based notification: {time_since_last_notification/60:.1f} min since last, data activity: {time_since_data/60:.1f} min ago")
+        else:
+            # First notification if enabled
+            should_send_time_based_notification = self.config.get('notification', {}).get('enabled', False)
+
+        # Send time-based notification if conditions met
+        if should_send_time_based_notification:
+            try:
+                total_recent_records = 0
+                table_activity_summary = []
+
+                # Get summary of recent activity
+                for table in self.tables:
+                    activity = self.table_activity.get(table, {})
+                    if activity.get('data_frequency', 0) > 0:
+                        table_activity_summary.append({
+                            'table': table,
+                            'records': activity['data_frequency'],
+                            'last_detected': activity.get('last_data_found')
+                        })
+                        total_recent_records += activity['data_frequency']
+
+                # Create time-based notification message
+                import pytz
+                jakarta_tz = pytz.timezone('Asia/Jakarta')
+                # Make current_time timezone-aware first
+                if current_time.tzinfo is None:
+                    current_time = jakarta_tz.localize(current_time)
+                now_wib = current_time.astimezone(jakarta_tz)
+
+                table_names = {
+                    'cg_spot_price_history': 'Spot Price',
+                    'cg_funding_rate_history': 'Funding Rate',
+                    'cg_futures_basis_history': 'Futures Basis',
+                    'cg_spot_aggregated_taker_volume_history': 'Taker Volume',
+                    'cg_long_short_global_account_ratio_history': 'Global L/S Ratio',
+                    'cg_long_short_top_account_ratio_history': 'Top L/S Ratio'
+                }
+
+                readable_tables = ', '.join([table_names.get(table, table) for table in [s['table'] for s in table_activity_summary]])
+
+                time_message = f"""📊 Real-time Market Monitor Report
+
+📅 Time: {now_wib.strftime('%d-%m-%Y %H:%M:%S')} WIB
+📈 Recent Activity: {total_recent_records} new records detected
+📊 Active Tables: {readable_tables}
+
+📋 Table Activity:
+""" + '\n'.join([f"• {table_names.get(s['table'], s['table'])}: {s['records']} records"
+                      for s in table_activity_summary]) + f"""
+
+🤖 XGBoost Real-time Monitor
+⏰ Periodic Report | Last training: {'Triggered' if training_triggered else 'No recent training'}"""
+
+                # Send time-based notification
+                telegram_token = self.config['notification']['telegram_token']
+                telegram_chat_id = self.config['notification']['telegram_chat_id']
+
+                if telegram_token and telegram_chat_id:
+                    import requests
+                    url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+                    payload = {
+                        'chat_id': telegram_chat_id,
+                        'text': time_message
+                    }
+
+                    response = requests.post(url, json=payload, timeout=10)
+                    if response.status_code == 200:
+                        self.last_notification_time = current_time
+                        self.notification_count += 1
+                        logger.info(f"📱 Time-based notification sent successfully (#{self.notification_count})")
+                    elif response.status_code == 429:
+                        logger.error(f"⛔ TELEGRAM RATE LIMIT HIT during time-based notification!")
+                    else:
+                        logger.error(f"❌ Telegram API error during time-based notification: {response.status_code}")
+
+            except Exception as e:
+                logger.error(f"Error sending time-based notification: {e}")
+
+        return training_triggered
 
     def accelerate_other_tables(self, priority_table: str):
         """Accelerate check intervals for related tables when high priority data is found."""
