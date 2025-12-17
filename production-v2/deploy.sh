@@ -1,17 +1,20 @@
 #!/bin/bash
 
-# XGBoost Real-time Trading System - Production Deployment Script
-# One-click deployment for the complete real-time training and API system
+# XGBoost Real-time System Deployment - API & Monitoring Only
+# Run this AFTER historical training with simple_run.sh
 
 set -e  # Exit on any error
 
-echo "🚀 XGBoost Real-time Trading System - Production Deployment"
-echo "=========================================================="
+echo "🚀 XGBoost Real-time System Deployment"
+echo "===================================="
+echo "🤖 Smart monitoring & API server for 2025 data"
+echo ""
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Function to print colored output
@@ -27,64 +30,101 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+print_header() {
+    echo -e "${BLUE}$1${NC}"
+}
+
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 print_status "Working directory: $SCRIPT_DIR"
 
-# Check if Docker is installed
+# Check if historical training was completed
+print_header "Step 1: Checking Prerequisites"
+echo ""
+
+# Check .env file
+if [ ! -f .env ]; then
+    print_error "❌ .env file not found!"
+    echo ""
+    print_header "🔧 Setup Required:"
+    echo ""
+    echo "1. Copy environment template:"
+    echo "   cp .env.example .env"
+    echo ""
+    echo "2. Edit with your database credentials:"
+    echo "   nano .env"
+    echo ""
+    print_warning "⚠️  Never commit .env file to version control!"
+    echo ""
+    exit 1
+fi
+
+# Load environment variables
+source .env
+print_status "✅ Environment file loaded"
+
+# Check if model files exist from historical training
+print_status "Checking for trained models..."
+MODEL_DIR="../output_train"
+
+if [ ! -d "$MODEL_DIR" ]; then
+    print_warning "⚠️ Model directory not found: $MODEL_DIR"
+    print_warning "   Have you run historical training first?"
+    echo ""
+    print_header "📋 Required Steps:"
+    echo "1. cd .. (go to parent folder)"
+    echo "2. ./simple_run.sh (run historical training)"
+    echo "3. cd production-v2 (back to this folder)"
+    echo "4. ./deploy.sh (run this script again)"
+    echo ""
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+else
+    model_count=$(ls -1 "$MODEL_DIR"/*.joblib 2>/dev/null | wc -l)
+    if [ "$model_count" -gt 0 ]; then
+        print_status "✅ Found $model_count trained model(s)"
+        echo "   Models:"
+        ls -la "$MODEL_DIR"/*.joblib 2>/dev/null | head -3
+    else
+        print_warning "⚠️ No model files found in $MODEL_DIR"
+        print_warning "   System will create models when data arrives"
+    fi
+fi
+
+echo ""
+
+# Check Docker
+print_header "Step 2: Checking Docker Installation"
+echo ""
+
 if ! command -v docker &> /dev/null; then
-    print_error "Docker is not installed. Please install Docker first."
+    print_error "❌ Docker is not installed"
     exit 1
 fi
 
 if ! command -v docker-compose &> /dev/null; then
-    print_error "Docker Compose is not installed. Please install Docker Compose first."
+    print_error "❌ Docker Compose is not installed"
     exit 1
 fi
 
-# Create necessary directories
-print_status "Creating necessary directories..."
-mkdir -p ../output_train/models
-mkdir -p ../state
-mkdir -p ../logs
-mkdir -p ../config
+print_status "✅ Docker and Docker Compose are available"
+echo ""
 
-# Create .env file if it doesn't exist
-if [ ! -f .env ]; then
-    print_status "Creating .env file from template..."
-    cp .env.example .env
-    print_warning "Please edit .env file with your database credentials and API settings"
-    print_warning "Then run this script again"
-    exit 1
-fi
+# Test database connection (quick test)
+print_header "Step 3: Testing Database Connection"
+echo ""
 
-# Source environment variables
-source .env
-
-# Validate required environment variables
-print_status "Validating environment variables..."
-required_vars=("TRADING_DB_HOST" "TRADING_DB_USER" "TRADING_DB_PASSWORD" "TRADING_DB_NAME")
-missing_vars=()
-
-for var in "${required_vars[@]}"; do
-    if [ -z "${!var}" ]; then
-        missing_vars+=("$var")
-    fi
-done
-
-if [ ${#missing_vars[@]} -ne 0 ]; then
-    print_error "Missing required environment variables: ${missing_vars[*]}"
-    print_error "Please set these in your .env file"
-    exit 1
-fi
-
-# Test database connection
-print_status "Testing database connection..."
-python3 - <<EOF
+python3 -c "
 import pymysql
 import os
+from dotenv import load_dotenv
+
+load_dotenv('.env')
 
 try:
     conn = pymysql.connect(
@@ -95,30 +135,47 @@ try:
         database=os.getenv('TRADING_DB_NAME'),
         connect_timeout=5
     )
-    print("✅ Database connection successful")
+    print('✅ Database connection successful')
     conn.close()
 except Exception as e:
-    print(f"❌ Database connection failed: {e}")
+    print(f'❌ Database connection failed: {e}')
     exit(1)
-EOF
+"
 
 if [ $? -ne 0 ]; then
-    print_error "Database connection test failed. Please check your credentials."
+    print_error "Database connection test failed!"
+    print_error "Please check your .env configuration"
     exit 1
 fi
 
-# Setup database for smart monitoring
-print_status "Setting up database for smart monitoring..."
-python3 setup_database.py
+print_status "✅ Database connection validated"
+echo ""
 
-if [ $? -ne 0 ]; then
-    print_error "Database setup failed. Please check the error messages."
-    exit 1
+# Setup database for monitoring
+print_header "Step 4: Setting up Database for Smart Monitoring"
+echo ""
+
+if [ -f "setup_database.py" ]; then
+    print_status "Running database setup..."
+    python3 setup_database.py
+
+    if [ $? -eq 0 ]; then
+        print_status "✅ Database setup completed"
+    else
+        print_error "❌ Database setup failed!"
+        exit 1
+    fi
+else
+    print_warning "⚠️ setup_database.py not found, skipping"
 fi
+
+echo ""
 
 # Create Docker Compose file
-print_status "Creating Docker Compose configuration..."
-cat > docker-compose.yml << 'EOF'
+print_header "Step 5: Creating Docker Configuration"
+echo ""
+
+cat > docker-compose.yml << EOF
 version: '3.8'
 
 services:
@@ -131,16 +188,31 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     environment:
-      - TRADING_DB_HOST=${TRADING_DB_HOST}
-      - TRADING_DB_PORT=${TRADING_DB_PORT}
-      - TRADING_DB_USER=${TRADING_DB_USER}
-      - TRADING_DB_PASSWORD=${TRADING_DB_PASSWORD}
-      - TRADING_DB_NAME=${TRADING_DB_NAME}
-      - API_HOST=${API_HOST:-0.0.0.0}
-      - API_PORT=${API_PORT:-8000}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - QUANTCONNECT_CORS_ORIGIN=${QUANTCONNECT_CORS_ORIGIN:-https://www.quantconnect.com}
+      # Trading Database (for monitoring)
+      TRADING_DB_HOST: \${TRADING_DB_HOST}
+      TRADING_DB_PORT: \${TRADING_DB_PORT}
+      TRADING_DB_USER: \${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: \${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: \${TRADING_DB_NAME}
+
+      # Results Database (for storing results)
+      DB_HOST: \${DB_HOST}
+      DB_PORT: \${DB_PORT}
+      DB_USER: \${DB_USER}
+      DB_PASSWORD: \${DB_PASSWORD}
+      DB_NAME: \${DB_NAME}
+
+      # API Configuration
+      API_HOST: \${API_HOST:-0.0.0.0}
+      API_PORT: \${API_PORT:-8000}
+      DOMAIN: \${DOMAIN}
+      OUTPUT_DIR: /app/output_train
+
+      # QuantConnect Integration
+      QUANTCONNECT_CORS_ORIGIN: \${QUANTCONNECT_CORS_ORIGIN:-https://www.quantconnect.com}
+      TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
+
     volumes:
       - ../output_train:/app/output_train
       - ../state:/app/state
@@ -153,6 +225,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
 
   # Real-time Monitor for New Data
   realtime-monitor:
@@ -161,14 +234,21 @@ services:
       dockerfile: Dockerfile.monitor
     container_name: xgboost-realtime-monitor
     environment:
-      - TRADING_DB_HOST=${TRADING_DB_HOST}
-      - TRADING_DB_PORT=${TRADING_DB_PORT}
-      - TRADING_DB_USER=${TRADING_DB_USER}
-      - TRADING_DB_PASSWORD=${TRADING_DB_PASSWORD}
-      - TRADING_DB_NAME=${TRADING_DB_NAME}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      TRADING_DB_HOST: \${TRADING_DB_HOST}
+      TRADING_DB_PORT: \${TRADING_DB_PORT}
+      TRADING_DB_USER: \${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: \${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: \${TRADING_DB_NAME}
+      OUTPUT_DIR: /app/output_train
+
+      TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
+
+      # Focus on 2025 data
+      focus_year: 2025
+
     volumes:
+      - ../output_train:/app/output_train
       - ../state:/app/state
       - ../logs:/app/logs
     restart: unless-stopped
@@ -184,40 +264,39 @@ services:
       dockerfile: Dockerfile.trainer
     container_name: xgboost-realtime-trainer
     environment:
-      - TRADING_DB_HOST=${TRADING_DB_HOST}
-      - TRADING_DB_PORT=${TRADING_DB_PORT}
-      - TRADING_DB_USER=${TRADING_DB_USER}
-      - TRADING_DB_PASSWORD=${TRADING_DB_PASSWORD}
-      - TRADING_DB_NAME=${TRADING_DB_NAME}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      TRADING_DB_HOST: \${TRADING_DB_HOST}
+      TRADING_DB_PORT: \${TRADING_DB_PORT}
+      TRADING_DB_USER: \${TRADING_DB_USER}
+      TRADING_DB_PASSWORD: \${TRADING_DB_PASSWORD}
+      TRADING_DB_NAME: \${TRADING_DB_NAME}
+      OUTPUT_DIR: /app/output_train
+
+      TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: \${TELEGRAM_CHAT_ID}
+      WEBHOOK_URL: \${WEBHOOK_URL}
+
+      # Training Configuration
+      PERFORMANCE_THRESHOLD: \${PERFORMANCE_THRESHOLD:-0.6}
+
     volumes:
       - ../output_train:/app/output_train
       - ../state:/app/state
       - ../logs:/app/logs
-    restart: unless-stopped
+    restart: "no"  # Controlled by monitor
     networks:
       - xgboost-network
-    depends_on:
-      - quantconnect-api
 
 networks:
   xgboost-network:
     driver: bridge
-
-volumes:
-  output_train:
-    driver: local
-  state:
-    driver: local
-  logs:
-    driver: local
 EOF
+
+print_status "✅ Docker Compose configuration created"
 
 # Create Dockerfiles
 print_status "Creating Dockerfiles..."
 
-# Dockerfile for API
+# API Dockerfile
 cat > Dockerfile.api << 'EOF'
 FROM python:3.9-slim
 
@@ -249,7 +328,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["python", "quantconnect_api.py"]
 EOF
 
-# Dockerfile for Monitor
+# Monitor Dockerfile
 cat > Dockerfile.monitor << 'EOF'
 FROM python:3.9-slim
 
@@ -269,28 +348,35 @@ RUN mkdir -p /app/state /app/logs
 CMD ["python", "realtime_monitor.py"]
 EOF
 
-# Dockerfile for Trainer
+# Trainer Dockerfile
 cat > Dockerfile.trainer << 'EOF'
 FROM python:3.9-slim
 
 WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy trainer code
-COPY realtime_trainer.py .
+COPY realtime_trainer_pipeline.py .
 
 # Create necessary directories
 RUN mkdir -p /app/output_train /app/state /app/logs
 
+# Create log directory
+RUN mkdir -p /var/log
+
 # Run trainer (will be triggered by monitor)
-CMD ["python", "realtime_trainer.py", "--mode", "incremental"]
+CMD ["python", "realtime_trainer_pipeline.py", "--mode", "incremental"]
 EOF
 
-# Create requirements.txt
-print_status "Creating requirements.txt..."
+# Requirements
 cat > requirements.txt << 'EOF'
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -306,21 +392,35 @@ pymysql==1.1.0
 schedule==1.2.0
 python-multipart==0.0.6
 aiofiles==23.2.1
+
+# Core Pipeline Dependencies
+ta-lib==0.4.28
+matplotlib==3.7.2
+seaborn==0.12.2
+plotly==5.17.0
+tqdm==4.66.1
 EOF
 
+print_status "✅ Dockerfiles and requirements created"
+echo ""
+
 # Build and start containers
+print_header "Step 6: Building and Starting Services"
+echo ""
+
 print_status "Building Docker containers..."
 docker-compose build
 
 print_status "Starting containers..."
 docker-compose up -d
 
-# Wait for services to be ready
-print_status "Waiting for services to be ready..."
-sleep 10
+# Wait for services
+print_status "Waiting for services to start..."
+sleep 30
 
 # Check service health
-print_status "Checking service health..."
+print_header "Step 7: Verifying Deployment"
+echo ""
 
 # Check API health
 API_URL="http://localhost:${API_PORT:-8000}"
@@ -330,9 +430,10 @@ else
     print_warning "⚠️ API service might still be starting up"
 fi
 
-# Check if containers are running
+# Check containers
+print_status "Checking container status..."
 if docker-compose ps | grep -q "Up"; then
-    print_status "✅ All containers are running"
+    print_status "✅ Containers are running"
     docker-compose ps
 else
     print_error "❌ Some containers failed to start"
@@ -340,24 +441,39 @@ else
     exit 1
 fi
 
+echo ""
+
 # Create management scripts
-print_status "Creating management scripts..."
+print_header "Step 8: Creating Management Scripts"
+echo ""
 
 # Status script
 cat > status.sh << 'EOF'
 #!/bin/bash
 
-echo "📊 XGBoost Trading System - Service Status"
-echo "========================================"
+echo "📊 XGBoost Real-time System Status"
+echo "=================================="
 
 docker-compose ps
 
 echo ""
-echo "🔍 Container Logs:"
+echo "🔍 Service Health:"
 echo "------------------"
 
+API_URL="http://localhost:8000"
+echo "📡 API Health:"
+curl -s "$API_URL/health" | python3 -m json.tool 2>/dev/null || echo "   API not responding"
+
+echo ""
+echo "📈 API Status:"
+curl -s "$API_URL/status" | python3 -m json.tool 2>/dev/null || echo "   Status endpoint not responding"
+
+echo ""
+echo "🔍 Container Logs (last 10 lines each):"
+echo "----------------------------------------"
+
 echo "📡 API Logs:"
-docker-compose logs --tail=20 quantconnect-api
+docker-compose logs --tail=10 quantconnect-api
 
 echo ""
 echo "👀 Monitor Logs:"
@@ -368,14 +484,82 @@ echo "🏋 Trainer Logs:"
 docker-compose logs --tail=10 realtime-trainer
 EOF
 
-# Manual training trigger script
+# Stop script
+cat > stop.sh << 'EOF'
+#!/bin/bash
+
+echo "🛑 Stopping XGBoost Real-time System"
+echo "=================================="
+
+docker-compose down
+
+echo "✅ All services stopped"
+EOF
+
+# Restart script
+cat > restart.sh << 'EOF'
+#!/bin/bash
+
+echo "🔄 Restarting XGBoost Real-time System"
+echo "===================================="
+
+docker-compose restart
+
+echo "✅ Services restarted"
+echo ""
+echo "Check status with: ./status.sh"
+EOF
+
+# Test API script
+cat > test_api.sh << 'EOF'
+#!/bin/bash
+
+API_URL="http://localhost:8000"
+
+echo "🧪 Testing XGBoost API Endpoints"
+echo "================================="
+
+echo ""
+echo "1. Testing Health Check..."
+response=$(curl -s "$API_URL/health")
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "2. Testing Model Prediction..."
+response=$(curl -s -X POST "$API_URL/predict" \
+    -H 'Content-Type: application/json' \
+    -d '{
+        "features": {
+            "price_close": 42000.0,
+            "volume_usd": 1000000.0,
+            "price_high": 42500.0,
+            "price_low": 41500.0,
+            "exchange": "binance"
+        }
+    }')
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+
+echo ""
+echo "3. Testing Signal Generation..."
+response=$(curl -s -X POST "$API_URL/signal" \
+    -H 'Content-Type: application/json' \
+    -d '{
+        "exchange": "binance",
+        "symbol": "BTCUSDT",
+        "interval": "1h"
+    }')
+echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+EOF
+
+# Trigger training script
 cat > trigger_training.sh << 'EOF'
 #!/bin/bash
 
-echo "🚀 Triggering Manual Training"
-echo "============================"
+echo "🚀 Triggering Manual Model Training"
+echo "=================================="
 
 # Create trigger file
+mkdir -p ../state
 cat > ../state/realtime_trigger.json << EOF
 {
   "timestamp": "$(date -Iseconds)",
@@ -386,64 +570,48 @@ cat > ../state/realtime_trigger.json << EOF
 EOF
 
 echo "✅ Training trigger created"
-echo "📋 Check trainer logs for progress:"
+echo "📋 Monitor trainer logs:"
 echo "   docker-compose logs -f realtime-trainer"
 EOF
 
-# Stop script
-cat > stop.sh << 'EOF'
-#!/bin/bash
-
-echo "🛑 Stopping XGBoost Trading System"
-echo "=================================="
-
-docker-compose down
-
-echo "✅ All services stopped"
-EOF
-
-# Update script
-cat > update.sh << 'EOF'
-#!/bin/bash
-
-echo "🔄 Updating XGBoost Trading System"
-echo "=================================="
-
-# Pull latest code (if using git)
-if [ -d .git ]; then
-    git pull
-fi
-
-# Rebuild and restart
-docker-compose down
-docker-compose build
-docker-compose up -d
-
-echo "✅ System updated and restarted"
-EOF
-
 # Make scripts executable
-chmod +x status.sh trigger_training.sh stop.sh update.sh
+chmod +x status.sh stop.sh restart.sh test_api.sh trigger_training.sh
+
+print_status "✅ Management scripts created"
+echo ""
 
 # Success message
+print_header "🎉 Real-time System Deployment Complete!"
 echo ""
-echo "✅ Deployment completed successfully!"
+echo "${GREEN}What's been deployed:${NC}"
+echo "  ✅ FastAPI server for QuantConnect (Port ${API_PORT:-8000})"
+echo "  ✅ Real-time database monitor (2025 data)"
+echo "  ✅ Incremental model trainer"
+echo "  ✅ Management scripts"
 echo ""
-echo "🎉 Your XGBoost Real-time Trading System is now running!"
+echo "${YELLOW}API Endpoints:${NC}"
+echo "  📊 Health: $API_URL/health"
+echo "  🎯 Predict: $API_URL/predict"
+echo "  📈 Signal: $API_URL/signal"
+echo "  📋 Status: $API_URL/status"
 echo ""
-echo "📊 Service URLs:"
-echo "   • API Health: $API_URL/health"
-echo "   • API Docs: $API_URL/docs"
-echo "   • API Status: $API_URL/status"
+echo "${YELLOW}Management Commands:${NC}"
+echo "  📊 System status: ./status.sh"
+echo "  🧪 Test API: ./test_api.sh"
+echo "  🚀 Trigger training: ./trigger_training.sh"
+echo "  🔄 Restart system: ./restart.sh"
+echo "  🛑 Stop system: ./stop.sh"
 echo ""
-echo "🔧 Management Commands:"
-echo "   • Check status: ./status.sh"
-echo "   • View logs: docker-compose logs -f [service-name]"
-echo "   • Trigger training: ./trigger_training.sh"
-echo "   • Stop services: ./stop.sh"
-echo "   • Update system: ./update.sh"
+echo "${BLUE}QuantConnect Integration:${NC}"
+echo "  📄 Algorithm: XGBoostTradingAlgorithm_Final.py"
+echo "  🌐 API Base URL: https://${DOMAIN}:8000"
+echo "  🔗 Replace ObjectStore with API calls"
 echo ""
-echo "📱 Don't forget to configure your Telegram notifications in .env"
-echo "💡 Your QuantConnect algorithm can now use the API at test.dragonfortune.ai:8000"
+echo "${GREEN}🚀 Your automated real-time system is now running!${NC}"
+echo "   It will detect new 2025 data and update models automatically"
 echo ""
-echo "⚠️ IMPORTANT: Configure your firewall and SSL certificates for production use"
+echo "${BLUE}Next Steps:${NC}"
+echo "  1. Test API: ./test_api.sh"
+echo "  2. Upload XGBoostTradingAlgorithm_Final.py to QuantConnect"
+echo "  3. Configure algorithm with your API endpoint"
+echo "  4. Monitor: ./status.sh"
