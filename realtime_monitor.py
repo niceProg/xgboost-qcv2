@@ -69,30 +69,30 @@ class RealtimeDatabaseMonitor:
             'cg_spot_price_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'symbol', 'interval'],
-                'min_new_records': 5,    # Lower threshold for real-time
+                'min_new_records': 1,    # VERY LOW threshold for real-time
                 'priority': 'HIGH',
                 'max_check_interval': 30,  # Check every 30 seconds
-                'urgent_threshold': 20,   # Trigger immediate if >20 records
+                'urgent_threshold': 5,    # Trigger immediate if >5 records
                 'business_hours_only': False,
                 'realtime_window': 300    # Check last 5 minutes for new data
             },
             'cg_funding_rate_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 3,
-                'priority': 'MEDIUM',
+                'min_new_records': 1,    # VERY LOW threshold
+                'priority': 'HIGH',      # Increased priority for notifications
                 'max_check_interval': 60,  # Check every minute
-                'urgent_threshold': 10,
+                'urgent_threshold': 5,    # Lower urgent threshold
                 'business_hours_only': False,
                 'realtime_window': 600    # Check last 10 minutes
             },
             'cg_futures_basis_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 3,
-                'priority': 'MEDIUM',
+                'min_new_records': 1,    # VERY LOW threshold
+                'priority': 'HIGH',      # Increased priority
                 'max_check_interval': 60,
-                'urgent_threshold': 10,
+                'urgent_threshold': 5,    # Lower urgent threshold
                 'business_hours_only': False,
                 'realtime_window': 600
             },
@@ -100,31 +100,31 @@ class RealtimeDatabaseMonitor:
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange_name', 'symbol', 'interval'],
                 'exchange_col': 'exchange_name',
-                'min_new_records': 5,
+                'min_new_records': 1,    # VERY LOW threshold
                 'priority': 'HIGH',
                 'max_check_interval': 30,  # High volume - check every 30 seconds
-                'urgent_threshold': 20,
+                'urgent_threshold': 10,   # Lower urgent threshold
                 'business_hours_only': False,
                 'realtime_window': 300    # Check last 5 minutes
             },
             'cg_long_short_global_account_ratio_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 2,
-                'priority': 'LOW',
+                'min_new_records': 1,    # VERY LOW threshold
+                'priority': 'MEDIUM',    # Increased priority
                 'max_check_interval': 120,  # Check every 2 minutes
-                'urgent_threshold': 5,
-                'business_hours_only': True,
+                'urgent_threshold': 3,    # Lower urgent threshold
+                'business_hours_only': False,  # Changed to False for 24/7
                 'realtime_window': 900     # Check last 15 minutes
             },
             'cg_long_short_top_account_ratio_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 2,
-                'priority': 'LOW',
+                'min_new_records': 1,    # VERY LOW threshold
+                'priority': 'MEDIUM',    # Increased priority
                 'max_check_interval': 120,
-                'urgent_threshold': 5,
-                'business_hours_only': True,
+                'urgent_threshold': 3,    # Lower urgent threshold
+                'business_hours_only': False,  # Changed to False for 24/7
                 'realtime_window': 900
             }
         }
