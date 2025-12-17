@@ -40,15 +40,15 @@ class RealtimeTrainerPipeline:
     This properly integrates with the existing training infrastructure
     """
 
-    def __init__(self, output_dir: str = '../output_train'):
+    def __init__(self, output_dir: str = '/app/output_train'):
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(exist_ok=True, parents=True)
         self.models_dir = self.output_dir / 'models'
         self.models_dir.mkdir(exist_ok=True)
 
         # State directory for tracking
-        self.state_dir = Path('../state')
-        self.state_dir.mkdir(exist_ok=True)
+        self.state_dir = Path('/app/state')
+        self.state_dir.mkdir(exist_ok=True, parents=True)
 
         logger.info(f"🚀 Real-time trainer initialized")
         logger.info(f"📁 Output directory: {self.output_dir}")
@@ -290,8 +290,8 @@ def main():
     parser = argparse.ArgumentParser(description='Real-time XGBoost Trainer with CORE Pipeline')
     parser.add_argument('--mode', choices=['incremental', 'full'], default='incremental',
                       help='Training mode (default: incremental)')
-    parser.add_argument('--output-dir', default='../output_train',
-                      help='Output directory (default: ../output_train)')
+    parser.add_argument('--output-dir', default='/app/output_train',
+                      help='Output directory (default: /app/output_train)')
 
     args = parser.parse_args()
 

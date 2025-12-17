@@ -97,6 +97,7 @@ class RealtimeDatabaseMonitor:
                 'time_col': 'time',
                 'created_col': 'created_at',
                 'key_cols': ['time', 'exchange_name', 'symbol', 'interval'],
+                'exchange_col': 'exchange_name',  # Specify exchange column name
                 'min_new_records': 10,
                 'priority': 'HIGH',
                 'max_check_interval': 60,
@@ -213,13 +214,14 @@ class RealtimeDatabaseMonitor:
             config = self.table_configs[table]
 
             # Quick check for recent high-volume data (MariaDB compatible)
+            exchange_col = config.get('exchange_col', 'exchange')  # Default to 'exchange'
             urgent_query = f"""
             SELECT COUNT(*) as recent_count,
                    MAX({config['created_col']}) as latest_created,
                    TIMESTAMPDIFF(SECOND, MAX({config['created_col']}), NOW()) as seconds_ago
             FROM {table}
             WHERE {config['created_col']} >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
-            AND exchange IN %s
+            AND `{exchange_col}` IN %s
             """
 
             cursor.execute(urgent_query, (self.config['exchanges'],))
@@ -325,7 +327,13 @@ class RealtimeDatabaseMonitor:
             created_col = table_config['created_col']
 
             # Get last processed timestamp (from time column, not created_at)
-            last_processed = datetime.fromisoformat(self.state['last_processed'][table])
+            last_processed_timestamp = self.state['last_processed'][table]
+            if isinstance(last_processed_timestamp, int):
+                # Handle millisecond timestamp
+                last_processed = datetime.fromtimestamp(last_processed_timestamp / 1000)
+            else:
+                # Handle ISO format string
+                last_processed = datetime.fromisoformat(last_processed_timestamp)
 
             # Focus on 2025 data
             focus_start = datetime(self.config['focus_year'], 1, 1, 0, 0, 0)
@@ -346,10 +354,14 @@ class RealtimeDatabaseMonitor:
             AND exchange IN %s
             """
 
-            # Determine column name for symbols
+            # Determine column name for symbols and exchanges
             symbol_col = 'symbol' if 'symbol' in table_config['key_cols'] else 'pair'
+            exchange_col = table_config.get('exchange_col', 'exchange')  # Default to 'exchange'
             pairs = self.config['monitor_pairs']
             exchanges = self.config['exchanges']
+
+            # Replace exchange column name in query
+            query = query.replace('AND exchange IN %s', f'AND `{exchange_col}` IN %s')
 
             cursor.execute(query, (exchanges,))
             result = cursor.fetchone()

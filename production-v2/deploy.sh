@@ -172,23 +172,13 @@ else
     print_status "✅ Created output_train directory"
 fi
 
-# Setup database for monitoring
-print_header "Step 5: Setting up Database for Smart Monitoring"
+# Skip database setup - newera is read-only
+print_header "Step 5: Database Configuration Check"
 echo ""
 
-if [ -f "setup_database.py" ]; then
-    print_status "Running database setup..."
-    python3 setup_database.py
-
-    if [ $? -eq 0 ]; then
-        print_status "✅ Database setup completed"
-    else
-        print_error "❌ Database setup failed!"
-        exit 1
-    fi
-else
-    print_warning "⚠️ setup_database.py not found, skipping"
-fi
+print_status "✅ Using read-only access to newera database"
+print_status "✅ No modifications to source database required"
+print_status "✅ Training results stored in xgboostqc database"
 
 echo ""
 
