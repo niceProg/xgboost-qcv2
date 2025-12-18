@@ -365,7 +365,9 @@ RUN pip install --upgrade pip && \
     python3 -c "import requests; print('✅ Requests module available for Telegram notifications')" && \
     python3 -c "import schedule; print('✅ Schedule module available')" && \
     python3 -c "import pytz; print('✅ PyTZ module available')" && \
-    echo "✅ All notification dependencies verified"
+    python3 -c "import pyarrow; print('✅ PyArrow module available for parquet files')" && \
+    python3 -c "import pandas; pandas.options.display.max_rows=10; print('✅ Pandas can use PyArrow engine')" && \
+    echo "✅ All critical dependencies verified"
 
 # Copy API code
 COPY structured_api.py .
@@ -462,22 +464,17 @@ COPY requirements.container.txt requirements.txt
 
 # Install ALL dependencies from requirements.txt (most reliable approach)
 RUN pip install --upgrade pip && \
-    echo "📦 Installing critical dependencies..." && \
-    (pip install --no-cache-dir SQLAlchemy==2.0.45 || echo "⚠️ SQLAlchemy install failed") && \
-    (pip install --no-cache-dir PyMySQL==1.1.2 || echo "⚠️ PyMySQL install failed") && \
-    (pip install --no-cache-dir pandas==2.3.3 || echo "⚠️ Pandas install failed") && \
-    (pip install --no-cache-dir numpy==2.0.2 || echo "⚠️ NumPy install failed") && \
-    (pip install --no-cache-dir xgboost==2.1.4 || echo "⚠️ XGBoost install failed") && \
-    (pip install --no-cache-dir scikit-learn==1.6.1 || echo "⚠️ Scikit-learn install failed") && \
-    (pip install --no-cache-dir python-dotenv==1.2.1 || echo "⚠️ python-dotenv install failed") && \
-    (pip install --no-cache-dir pytz==2025.2 || echo "⚠️ PyTZ install failed") && \
-    (pip install --no-cache-dir fastapi==0.124.4 || echo "⚠️ FastAPI install failed") && \
-    (pip install --no-cache-dir uvicorn==0.38.0 || echo "⚠️ Uvicorn install failed") && \
-    (pip install --no-cache-dir schedule==1.2.0 || echo "⚠️ Schedule install failed") && \
-    (pip install --no-cache-dir requests==2.32.5 || echo "⚠️ Requests install failed") && \
-    echo "✅ Dependencies installation completed" && \
-    echo "🔍 Verifying notification dependencies..." && \
-    python3 -c "import requests; print('✅ Requests module available for Telegram notifications')"
+    echo "📦 Installing ALL dependencies from requirements.txt..." && \
+    pip install --no-cache-dir -r requirements.txt && \
+    echo "✅ All dependencies from requirements.txt installed successfully" && \
+    echo "🔍 Verifying critical modules..." && \
+    python3 -c "import requests; print('✅ Requests module available for Telegram notifications')" && \
+    python3 -c "import schedule; print('✅ Schedule module available')" && \
+    python3 -c "import pytz; print('✅ PyTZ module available')" && \
+    python3 -c "import pyarrow; print('✅ PyArrow module available for parquet files')" && \
+    python3 -c "import pandas; print('✅ Pandas with PyArrow engine available')" && \
+    python3 -c "import sklearn; print('✅ Scikit-learn module available')" && \
+    echo "✅ All critical dependencies verified"
 
 # Copy ALL core training files - FIX: Missing files error
 COPY realtime_trainer_pipeline.py .

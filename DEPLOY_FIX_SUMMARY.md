@@ -254,6 +254,7 @@ else:
 - ❌ `database_storage not found` → ✅ Module available
 - ❌ `Command execution failed` → ✅ Proper commands
 - ❌ `requirements.container.txt not found` → ✅ File created before build
+- ❌ `Unable to find a usable engine for parquet` → ✅ PyArrow properly installed and verified
 
 ### ✅ **Successful Deployment**:
 - 🐳 **3 Containers running** smoothly
@@ -286,10 +287,36 @@ docker-compose logs realtime-monitor
 curl http://localhost:8000/training/status
 ```
 
+### 12. ✅ **Fixed Missing PyArrow Module for Parquet Support**
+**Problem**: Trainer container tidak bisa baca parquet files karena PyArrow engine tidak tersedia
+```
+❌ Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+❌ Missing optional dependency 'pyarrow'. pyarrow is required for parquet support.
+```
+
+**Solution**: Update trainer container untuk pakai requirements.txt dan verifikasi PyArrow
+```dockerfile
+# FIXED: Use requirements.txt approach untuk trainer (seperti API container)
+RUN pip install --upgrade pip && \
+    echo "📦 Installing ALL dependencies from requirements.txt..." && \
+    pip install --no-cache-dir -r requirements.txt && \
+    echo "✅ All dependencies from requirements.txt installed successfully" && \
+    echo "🔍 Verifying critical modules..." && \
+    python3 -c "import pyarrow; print('✅ PyArrow module available for parquet files')" && \
+    python3 -c "import pandas; print('✅ Pandas with PyArrow engine available')" && \
+    echo "✅ All critical dependencies verified"
+```
+
+**Reasoning**:
+- `pyarrow==21.0.0` already exists di requirements.txt
+- Trainer container masih pakai individual installs yang tidak lengkap
+- Dengan requirements.txt approach, semua dependencies termasuk PyArrow terinstall dengan benar
+- Verifikasi memastikan PyArrow available untuk baca .parquet files
+
 **🎉 Deploy.sh is now FULLY FIXED and ready for production deployment!**
 
 ---
 *Generated: 2025-12-18*
-*Fixed Issues: 11/11*
+*Fixed Issues: 12/12*
 *Status: ✅ Ready for Docker Deployment*
-*Last Fix: Missing requests module for Telegram notifications*
+*Last Fix: Missing PyArrow module for parquet support*
