@@ -1,4 +1,0 @@
-{"timestamp": "2025-12-17T17:48:59.722203", "training_successful": false, "pipeline_type": "CORE_6_STEP", "trigger_reason": "automatic", "models_created": 0, "tables_with_new_data": []}
-{"timestamp": "2025-12-17T17:49:31.701051", "training_successful": false, "pipeline_type": "CORE_6_STEP", "trigger_reason": "automatic", "models_created": 0, "tables_with_new_data": []}
-{"timestamp": "2025-12-17T17:51:47.097068", "training_successful": true, "pipeline_type": "CORE_6_STEP", "trigger_reason": "automatic", "models_created": 3, "tables_with_new_data": []}
-{"timestamp": "2025-12-18T03:46:36.492289", "training_successful": true, "pipeline_type": "CORE_6_STEP", "trigger_reason": "new_data_arrival", "models_created": 4, "tables_with_new_data": ["cg_futures_basis_history"]}
