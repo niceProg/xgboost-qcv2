@@ -64,68 +64,68 @@ class RealtimeDatabaseMonitor:
         self.config = self.load_config()
         self.state = self.load_state()
 
-        # Smart table configurations - based on time column for real-time detection
+        # Smart table configurations - based on created_at for efficient monitoring
         self.table_configs = {
             'cg_spot_price_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'symbol', 'interval'],
-                'min_new_records': 1,    # VERY LOW threshold for real-time
+                'min_new_records': 10,    # MINIMUM 10 records untuk trigger
                 'priority': 'HIGH',
-                'max_check_interval': 30,  # Check every 30 seconds
-                'urgent_threshold': 5,    # Trigger immediate if >5 records
+                'max_check_interval': 60,   # Check every 1 minute
+                'urgent_threshold': 20,   # Trigger urgent if >20 records
                 'business_hours_only': False,
-                'realtime_window': 300    # Check last 5 minutes for new data
+                'check_window': 300       # Check last 5 minutes for new records
             },
             'cg_funding_rate_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 1,    # VERY LOW threshold
-                'priority': 'HIGH',      # Increased priority for notifications
-                'max_check_interval': 60,  # Check every minute
-                'urgent_threshold': 5,    # Lower urgent threshold
+                'min_new_records': 10,    # MINIMUM 10 records
+                'priority': 'HIGH',
+                'max_check_interval': 60,   # Check every 1 minute
+                'urgent_threshold': 20,
                 'business_hours_only': False,
-                'realtime_window': 600    # Check last 10 minutes
+                'check_window': 300
             },
             'cg_futures_basis_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 1,    # VERY LOW threshold
-                'priority': 'HIGH',      # Increased priority
-                'max_check_interval': 60,
-                'urgent_threshold': 5,    # Lower urgent threshold
+                'min_new_records': 10,    # MINIMUM 10 records
+                'priority': 'HIGH',
+                'max_check_interval': 300,
+                'urgent_threshold': 20,
                 'business_hours_only': False,
-                'realtime_window': 600
+                'check_window': 300
             },
             'cg_spot_aggregated_taker_volume_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange_name', 'symbol', 'interval'],
                 'exchange_col': 'exchange_name',
-                'min_new_records': 1,    # VERY LOW threshold
+                'min_new_records': 10,    # MINIMUM 10 records
                 'priority': 'HIGH',
-                'max_check_interval': 30,  # High volume - check every 30 seconds
-                'urgent_threshold': 10,   # Lower urgent threshold
+                'max_check_interval': 60,   # Check every 1 minute
+                'urgent_threshold': 20,
                 'business_hours_only': False,
-                'realtime_window': 300    # Check last 5 minutes
+                'check_window': 300
             },
             'cg_long_short_global_account_ratio_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 1,    # VERY LOW threshold
-                'priority': 'MEDIUM',    # Increased priority
-                'max_check_interval': 120,  # Check every 2 minutes
-                'urgent_threshold': 3,    # Lower urgent threshold
-                'business_hours_only': False,  # Changed to False for 24/7
-                'realtime_window': 900     # Check last 15 minutes
+                'min_new_records': 10,    # MINIMUM 10 records
+                'priority': 'MEDIUM',
+                'max_check_interval': 60,   # Check every 1 minute
+                'urgent_threshold': 20,
+                'business_hours_only': False,
+                'check_window': 300
             },
             'cg_long_short_top_account_ratio_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 1,    # VERY LOW threshold
-                'priority': 'MEDIUM',    # Increased priority
-                'max_check_interval': 120,
-                'urgent_threshold': 3,    # Lower urgent threshold
-                'business_hours_only': False,  # Changed to False for 24/7
-                'realtime_window': 900
+                'min_new_records': 10,    # MINIMUM 10 records
+                'priority': 'MEDIUM',
+                'max_check_interval': 60,   # Check every 1 minute
+                'urgent_threshold': 20,
+                'business_hours_only': False,
+                'check_window': 300
             }
         }
 
@@ -190,10 +190,38 @@ class RealtimeDatabaseMonitor:
             return config['max_check_interval']  # Low priority: as configured
 
     def should_check_table_now(self, table: str) -> bool:
-        """Simplified logic - always check all tables for real-time monitoring."""
-        # For real-time monitoring, always check all tables
-        # Disable adaptive checking to ensure we don't miss data
-        return True
+        """Periodic checking logic - check based on configured interval."""
+        # Get last check time dari state
+        last_check_time = self.state.get('last_check_time', {}).get(table)
+
+        if not last_check_time:
+            # Belum pernah di-check, check sekarang
+            return True
+
+        # Convert last_check_time ke datetime
+        if isinstance(last_check_time, str):
+            try:
+                last_check_dt = datetime.fromisoformat(last_check_time)
+            except:
+                return True  # Error, check sekarang
+        else:
+            return True
+
+        # Calculate time since last check (make timezone-aware)
+        import pytz
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+        current_time = datetime.now(jakarta_tz)
+
+        # Make sure last_check_dt is timezone-aware
+        if last_check_dt.tzinfo is None:
+            last_check_dt = jakarta_tz.localize(last_check_dt)
+
+        time_since_check = (current_time - last_check_dt).total_seconds()
+
+        # Check if enough time has passed based on table config
+        check_interval = self.table_configs[table]['max_check_interval']
+
+        return time_since_check >= check_interval
 
     def check_urgent_conditions(self, table: str) -> bool:
         """Check for urgent conditions that require immediate attention."""
@@ -305,7 +333,7 @@ class RealtimeDatabaseMonitor:
             return False
 
     def check_new_data(self, table: str) -> Optional[Dict]:
-        """Check for new data using smart created_at approach."""
+        """Check for new data using created_at column for efficient monitoring."""
         if not self.connection:
             if not self.connect_to_database():
                 return None
@@ -313,39 +341,29 @@ class RealtimeDatabaseMonitor:
         try:
             cursor = self.connection.cursor()
             table_config = self.table_configs[table]
-            time_col = table_config['time_col']
-            # We don't use created_col anymore, only time_col for data detection
+            check_window = table_config.get('check_window', 300)  # Default 5 minutes
 
-            # Get last processed timestamp (from time column, not created_at)
-            last_processed_timestamp = self.state['last_processed'][table]
-            if isinstance(last_processed_timestamp, int):
-                # Handle millisecond timestamp
-                last_processed = datetime.fromtimestamp(last_processed_timestamp / 1000)
+            # Get last check time dari state, fallback ke 5 menit yang lalu
+            last_check_time = self.state.get('last_check_time', {}).get(table)
+            if not last_check_time:
+                last_check_time = datetime.now().timestamp() - check_window
             else:
-                # Handle ISO format string
-                last_processed = datetime.fromisoformat(last_processed_timestamp)
+                if isinstance(last_check_time, str):
+                    last_check_time = datetime.fromisoformat(last_check_time).timestamp()
 
-            # Focus on 2025 data
-            focus_start = datetime(self.config['focus_year'], 1, 1, 0, 0, 0)
-
-            # Determine column name for symbols and exchanges
-            symbol_col = 'symbol' if 'symbol' in table_config['key_cols'] else 'pair'
+            # Determine column name for exchanges
             exchange_col = table_config.get('exchange_col', 'exchange')  # Default to 'exchange'
             exchanges = self.config['exchanges']
 
-            # Real-time query: Check for new data using time-based detection
-            # Convert last_processed to milliseconds for comparison
-            last_processed_ms = int(last_processed.timestamp() * 1000)
-            realtime_window = table_config.get('realtime_window', 300)  # Default 5 minutes
-
+            # Query berdasarkan created_at column
             query = f"""
             SELECT
-                COUNT(*) as count,
-                MAX({time_col}) as max_time,
-                MIN({time_col}) as min_time,
-                COUNT(CASE WHEN {time_col} > UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL {realtime_window} SECOND)) * 1000 THEN 1 END) as recent_count
+                COUNT(*) as new_count,
+                MAX(created_at) as latest_created,
+                MIN(created_at) as earliest_created,
+                COUNT(CASE WHEN created_at > DATE_SUB(NOW(), INTERVAL {check_window} SECOND) THEN 1 END) as recent_count
             FROM {table}
-            WHERE {time_col} > {last_processed_ms}
+            WHERE created_at > DATE_SUB(NOW(), INTERVAL {check_window} SECOND)
             AND `{exchange_col}` IN %s
             """
 
@@ -359,28 +377,25 @@ class RealtimeDatabaseMonitor:
                 import pytz
                 jakarta_tz = pytz.timezone('Asia/Jakarta')
                 activity['last_data_found'] = datetime.now(jakarta_tz)
-                activity['data_frequency'] = result[3] if result[3] else 0  # recent_count
+                activity['data_frequency'] = result[0]  # new_count
 
-                # Calculate priority based on volume and recency
-                recent_count = result[3] if result[3] else 0
-                if recent_count > 0:
-                    priority = "HIGH_PRIORITY"  # Recent data = high priority
-                elif result[0] >= table_config['urgent_threshold']:
+                # Calculate priority based on count
+                new_count = result[0]
+                if new_count >= table_config['urgent_threshold']:
                     priority = "URGENT"
-                elif result[0] >= table_config['min_new_records']:
+                elif new_count >= table_config['min_new_records']:
                     priority = table_config['priority']
                 else:
                     priority = "LOW"
 
                 new_data = {
                     'table': table,
-                    'new_count': result[0],
-                    'min_time': result[2] if result[2] else None,
-                    'max_time': result[1] if result[1] else None,
-                    'recent_count': recent_count,
+                    'new_count': new_count,
+                    'earliest_created': result[1] if result[1] else None,
+                    'latest_created': result[2] if result[2] else None,
+                    'recent_count': result[3] if result[3] else 0,
                     'priority': priority,
-                    'last_processed': last_processed_ms,
-                    'detection_method': 'time_based_realtime'
+                    'detection_method': 'created_based_monitoring'
                 }
 
                 # Smart threshold checking
@@ -406,7 +421,7 @@ class RealtimeDatabaseMonitor:
 
                 if should_trigger:
                     logger.info(f"📊 New data in {table}: {result[0]} records (Priority: {priority})")
-                    logger.info(f"   Time range: {new_data['min_time']} to {new_data['max_time']}")
+                    logger.info(f"   Created time range: {new_data['earliest_created']} to {new_data['latest_created']}")
                     logger.info(f"   Recent records: {new_data.get('recent_count', 0)}")
                     logger.info(f"   Reason: {trigger_reason}")
 
@@ -419,7 +434,14 @@ class RealtimeDatabaseMonitor:
             # Use timezone-aware datetime for consistency
             import pytz
             jakarta_tz = pytz.timezone('Asia/Jakarta')
-            self.table_activity[table]['last_check'] = datetime.now(jakarta_tz)
+            current_time = datetime.now(jakarta_tz)
+            self.table_activity[table]['last_check'] = current_time
+
+            # Update state with last check time
+            if 'last_check_time' not in self.state:
+                self.state['last_check_time'] = {}
+            self.state['last_check_time'][table] = current_time.isoformat()
+            self.save_state()
 
             cursor.close()
             return None
@@ -447,36 +469,50 @@ class RealtimeDatabaseMonitor:
             return config['priority']
 
     def trigger_training(self, new_data_list: List[Dict]) -> bool:
-        """Trigger real-time training with new data."""
+        """Directly trigger real-time training pipeline."""
         try:
-            # Prepare trigger file
-            trigger_file = Path('./state/realtime_trigger.json')
-            # Use timezone-aware datetime for consistency
-            import pytz
-            jakarta_tz = pytz.timezone('Asia/Jakarta')
-            trigger_info = {
-                'timestamp': datetime.now(jakarta_tz).isoformat(),
-                'trigger_reason': 'new_data_arrival',
-                'new_data_summary': {
-                    data['table']: data['new_count']
-                    for data in new_data_list
-                },
-                'tables_with_new_data': [data['table'] for data in new_data_list]
-            }
-
-            with open(trigger_file, 'w') as f:
-                json.dump(trigger_info, f, indent=2)
-
-            logger.info(f"🚀 Triggered real-time training for {len(new_data_list)} tables")
-
-            # Send notification
+            # Send notification first
             self.send_notification(new_data_list)
 
             # Update last_processed times to latest data
             self.update_last_processed(new_data_list)
 
-            return True
+            # Directly run training pipeline
+            logger.info(f"🚀 Starting training pipeline for {len(new_data_list)} tables...")
 
+            import subprocess
+            cmd = [
+                'python3', 'realtime_trainer_pipeline.py',
+                '--mode', 'incremental',
+                '--output-dir', './output_train'
+            ]
+
+            logger.info(f"🏃 Running: {' '.join(cmd)}")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=7200  # 2 hours timeout
+            )
+
+            if result.returncode == 0:
+                logger.info("✅ Training pipeline completed successfully!")
+                if result.stdout:
+                    # Log last few lines dari output
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines[-5:]:  # Last 5 lines
+                        logger.info(f"📄 {line}")
+                return True
+            else:
+                logger.error("❌ Training pipeline failed!")
+                if result.stderr:
+                    logger.error(f"📄 Error: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            logger.error("❌ Training pipeline timed out!")
+            return False
         except Exception as e:
             logger.error(f"Error triggering training: {e}")
             return False
@@ -487,9 +523,9 @@ class RealtimeDatabaseMonitor:
             updated = False
             for data in new_data_list:
                 table = data['table']
-                if data['max_time']:
-                    # Update to the maximum time from new data
-                    self.state['last_processed'][table] = data['max_time']
+                if data['latest_created']:
+                    # Update to the latest created_at from new data
+                    self.state['last_processed'][table] = data['latest_created'].isoformat()
                     updated = True
 
             if updated:
@@ -543,10 +579,10 @@ class RealtimeDatabaseMonitor:
 📊 Tables: {readable_tables}
 ⏰ Time: {now_wib.strftime('%d-%m-%Y %H:%M:%S')} WIB
 
-Action: Real-time training triggered
-Status: Model will be updated automatically
+Action: Training pipeline STARTING NOW
+Status: 6-step CORE pipeline running automatically
 Models: Will be saved to ./output_train/models/
-Performance: Check ./logs/ for detailed metrics
+Duration: ~5-15 minutes (monitor ./logs/realtime_monitor.log)
 
 Table Breakdown:
 """ + '\n'.join([f"• {table_names.get(data['table'], data['table'])}: {data['new_count']:,} records ({data.get('priority', 'UNKNOWN')})"
@@ -804,20 +840,9 @@ Table Breakdown:
                 # Smart check all tables
                 self.check_all_tables()
 
-                # Adaptive sleep: shorter sleep when data is active, longer when quiet
-                current_time = datetime.now(jakarta_tz)
-                active_tables = sum(1 for t in self.tables if self.table_activity[t].get('last_data_found') and
-                                  (current_time - self.table_activity[t]['last_data_found']).total_seconds() < 300)
-
-                if active_tables > 0:
-                    sleep_time = 15  # Check every 15 seconds when active
-                    logger.debug(f"🔄 Active period: {active_tables} tables recently active, sleeping {sleep_time}s")
-                elif self.is_business_hours():
-                    sleep_time = 30  # Check every 30 seconds during business hours
-                    logger.debug(f"💼 Business hours: sleeping {sleep_time}s")
-                else:
-                    sleep_time = 60  # Check every minute during quiet hours
-                    logger.debug(f"🌙 Quiet hours: sleeping {sleep_time}s")
+                # Fixed sleep for periodic checking
+                sleep_time = 60  # Check every minute untuk update state
+                logger.debug(f"⏰ Periodic monitoring: sleeping {sleep_time}s")
 
                 # Calculate cycle time
                 cycle_time = (datetime.now(jakarta_tz) - cycle_start).total_seconds()

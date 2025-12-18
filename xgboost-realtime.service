@@ -1,0 +1,22 @@
+[Unit]
+Description=XGBoost Real-time Trading System
+After=network.target
+
+[Service]
+Type=simple
+User=yumna
+WorkingDirectory=/home/yumna/Working/dragonfortune/xgboost-qc
+Environment=PATH=/home/yumna/Working/dragonfortune/xgboost-qc/.xgboost-qc/bin
+ExecStart=/bin/bash -c "source .xgboost-qc/bin/activate && python realtime_monitor.py"
+Restart=always
+RestartSec=10
+
+# Environment variables (you can also use .env file)
+EnvironmentFile=-/home/yumna/Working/dragonfortune/xgboost-qc/.env
+
+# Logging
+StandardOutput=append:/home/yumna/Working/dragonfortune/xgboost-qc/logs/system.log
+StandardError=append:/home/yumna/Working/dragonfortune/xgboost-qc/logs/system_error.log
+
+[Install]
+WantedBy=multi-user.target

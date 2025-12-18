@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-12-19T03:12:56.030546+07:00",
+  "trigger_reason": "new_data_arrival",
+  "new_data_summary": {
+    "cg_futures_basis_history": 50,
+    "cg_spot_aggregated_taker_volume_history": 42
+  },
+  "tables_with_new_data": [
+    "cg_futures_basis_history",
+    "cg_spot_aggregated_taker_volume_history"
+  ]
+}
