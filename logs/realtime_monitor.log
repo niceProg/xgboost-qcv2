@@ -28,3 +28,55 @@
 2025-12-19 14:44:54,238 - INFO - ✅ Updated last_processed timestamps
 2025-12-19 14:44:54,238 - INFO - 🚀 Starting training pipeline for 2 tables...
 2025-12-19 14:44:54,241 - INFO - 🏃 Running: python3 realtime_trainer_pipeline.py --mode incremental --output-dir ./output_train
+2025-12-19 16:32:15,518 - INFO - 🧪 Running in test mode
+2025-12-19 16:32:15,622 - INFO - ✅ Connected to database: newera
+2025-12-19 17:31:23,019 - INFO - 🧪 Running in test mode
+2025-12-19 17:31:23,141 - INFO - ✅ Connected to database: newera
+2025-12-19 17:31:23,347 - INFO - 📊 New data in cg_spot_price_history: 53 records (Priority: URGENT)
+2025-12-19 17:31:23,348 - INFO -    Latest created: 2025-12-19 10:30:53
+2025-12-19 17:31:23,348 - INFO -    Reason: Minimum threshold met: 53 >= 10
+2025-12-19 17:31:23,348 - INFO - ⚡ High priority data in cg_spot_price_history, accelerating other table checks
+2025-12-19 17:31:23,348 - INFO - ⚡ Accelerated cg_funding_rate_history check interval to 30s
+2025-12-19 17:31:23,348 - INFO - ⚡ Accelerated cg_futures_basis_history check interval to 30s
+2025-12-19 17:31:23,348 - INFO - ⚡ Accelerated cg_spot_aggregated_taker_volume_history check interval to 30s
+2025-12-19 17:31:23,348 - INFO - ⚡ Accelerated cg_long_short_global_account_ratio_history check interval to 30s
+2025-12-19 17:31:23,348 - INFO - ⚡ Accelerated cg_long_short_top_account_ratio_history check interval to 30s
+2025-12-19 17:31:23,499 - INFO - 📊 New data in cg_funding_rate_history: 10 records (Priority: HIGH)
+2025-12-19 17:31:23,499 - INFO -    Latest created: 2025-12-19 10:30:19
+2025-12-19 17:31:23,499 - INFO -    Reason: Minimum threshold met: 10 >= 10
+2025-12-19 17:31:23,499 - INFO - ⚡ High priority data in cg_funding_rate_history, accelerating other table checks
+2025-12-19 17:31:23,500 - INFO - ⚡ Accelerated cg_spot_price_history check interval to 30s
+2025-12-19 17:31:23,500 - INFO - ⚡ Accelerated cg_futures_basis_history check interval to 30s
+2025-12-19 17:31:23,500 - INFO - ⚡ Accelerated cg_spot_aggregated_taker_volume_history check interval to 30s
+2025-12-19 17:31:23,500 - INFO - ⚡ Accelerated cg_long_short_global_account_ratio_history check interval to 30s
+2025-12-19 17:31:23,500 - INFO - ⚡ Accelerated cg_long_short_top_account_ratio_history check interval to 30s
+2025-12-19 17:31:25,022 - INFO - 📊 New data in cg_futures_basis_history: 61 records (Priority: URGENT)
+2025-12-19 17:31:25,022 - INFO -    Latest created: 2025-12-19 10:31:22
+2025-12-19 17:31:25,022 - INFO -    Reason: Minimum threshold met: 61 >= 10
+2025-12-19 17:31:25,023 - INFO - ⚡ High priority data in cg_futures_basis_history, accelerating other table checks
+2025-12-19 17:31:25,023 - INFO - ⚡ Accelerated cg_spot_price_history check interval to 30s
+2025-12-19 17:31:25,023 - INFO - ⚡ Accelerated cg_funding_rate_history check interval to 30s
+2025-12-19 17:31:25,023 - INFO - ⚡ Accelerated cg_spot_aggregated_taker_volume_history check interval to 30s
+2025-12-19 17:31:25,023 - INFO - ⚡ Accelerated cg_long_short_global_account_ratio_history check interval to 30s
+2025-12-19 17:31:25,023 - INFO - ⚡ Accelerated cg_long_short_top_account_ratio_history check interval to 30s
+2025-12-19 17:31:28,034 - INFO - 📊 New data in cg_spot_aggregated_taker_volume_history: 60 records (Priority: URGENT)
+2025-12-19 17:31:28,034 - INFO -    Latest created: 2025-12-19 10:30:34
+2025-12-19 17:31:28,034 - INFO -    Reason: Minimum threshold met: 60 >= 10
+2025-12-19 17:31:28,034 - INFO - ⚡ High priority data in cg_spot_aggregated_taker_volume_history, accelerating other table checks
+2025-12-19 17:31:28,034 - INFO - ⚡ Accelerated cg_spot_price_history check interval to 30s
+2025-12-19 17:31:28,034 - INFO - ⚡ Accelerated cg_funding_rate_history check interval to 30s
+2025-12-19 17:31:28,035 - INFO - ⚡ Accelerated cg_futures_basis_history check interval to 30s
+2025-12-19 17:31:28,035 - INFO - ⚡ Accelerated cg_long_short_global_account_ratio_history check interval to 30s
+2025-12-19 17:31:28,035 - INFO - ⚡ Accelerated cg_long_short_top_account_ratio_history check interval to 30s
+2025-12-19 17:31:28,175 - INFO - 📊 New data in cg_long_short_global_account_ratio_history: 11 records (Priority: MEDIUM)
+2025-12-19 17:31:28,175 - INFO -    Latest created: 2025-12-19 10:31:13
+2025-12-19 17:31:28,175 - INFO -    Reason: Minimum threshold met: 11 >= 10
+2025-12-19 17:31:28,433 - INFO - 📊 New data in cg_long_short_top_account_ratio_history: 10 records (Priority: MEDIUM)
+2025-12-19 17:31:28,433 - INFO -    Latest created: 2025-12-19 10:31:05
+2025-12-19 17:31:28,433 - INFO -    Reason: Minimum threshold met: 10 >= 10
+2025-12-19 17:31:28,434 - INFO - 📊 Monitoring cycle: 6 tables checked, 0 tables skipped
+2025-12-19 17:31:28,434 - INFO - 🎯 Training trigger priority order: ['cg_spot_price_history(URGENT)', 'cg_futures_basis_history(URGENT)', 'cg_spot_aggregated_taker_volume_history(URGENT)', 'cg_funding_rate_history(HIGH)', 'cg_long_short_global_account_ratio_history(MEDIUM)', 'cg_long_short_top_account_ratio_history(MEDIUM)']
+2025-12-19 17:31:34,313 - INFO - 📱 Telegram notification sent successfully (#1)
+2025-12-19 17:31:34,316 - INFO - ✅ Updated last_processed timestamps
+2025-12-19 17:31:34,316 - INFO - 🚀 Starting training pipeline for 6 tables...
+2025-12-19 17:31:34,321 - INFO - 🏃 Running: python3 realtime_trainer_pipeline.py --mode incremental --output-dir ./output_train

@@ -341,7 +341,7 @@ class RealtimeDatabaseMonitor:
         try:
             cursor = self.connection.cursor()
             table_config = self.table_configs[table]
-            check_window = table_config.get('check_window', 300)  # Default 5 minutes
+            check_window = table_config.get('check_window', 120)  # Default 2 minutes (lighter load)
 
             # Get last check time dari state, fallback ke 5 menit yang lalu
             last_check_time = self.state.get('last_check_time', {}).get(table)
