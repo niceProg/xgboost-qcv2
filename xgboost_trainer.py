@@ -307,7 +307,8 @@ class XGBoostTrainer:
         # Also save to database if enabled
         if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
             self.save_to_database(model, model_name, results)
-            self.update_training_session(model_name, results)
+            # DATABASE STORAGE DISABLED per client requirement
+            # self.update_training_session(model_name, results)
 
     def save_to_database(self, model: xgb.XGBClassifier, model_name: str, results: dict):
         """Save model and results to xgboostqc database."""
@@ -342,85 +343,10 @@ class XGBoostTrainer:
         except Exception as e:
             logger.warning(f"Failed to save model to database: {e}")
 
+    # METHOD DISABLED per client requirement
     def update_training_session(self, model_name: str, results: dict):
         """Update training session record with complete metrics."""
-        try:
-            import pymysql
-            from dotenv import load_dotenv
-
-            load_dotenv()
-
-            # Database config
-            db_config = {
-                'host': os.getenv('DB_HOST', '103.150.81.86'),
-                'port': int(os.getenv('DB_PORT', 3306)),
-                'database': os.getenv('DB_NAME', 'xgboostqc'),
-                'user': os.getenv('DB_USER', 'xgboostqc'),
-                'password': os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
-            }
-
-            conn = pymysql.connect(**db_config)
-            cursor = conn.cursor()
-
-            # Get the latest session (created by load_database.py)
-            cursor.execute(
-                "SELECT session_id FROM xgboost_training_sessions "
-                "WHERE status = 'data_loaded' OR status = 'created' "
-                "ORDER BY created_at DESC LIMIT 1"
-            )
-            result = cursor.fetchone()
-
-            if result:
-                session_id = result[0]
-                metrics = results.get('metrics', {})
-
-                # Update the session
-                sql = """
-                UPDATE xgboost_training_sessions SET
-                    status = 'completed',
-                    total_samples = %s,
-                    feature_count = %s,
-                    model_version = %s,
-                    best_params = %s,
-                    model_path = %s,
-                    train_auc = %s,
-                    val_auc = %s,
-                    test_auc = %s,
-                    test_accuracy = %s,
-                    test_precision = %s,
-                    test_recall = %s,
-                    test_f1 = %s,
-                    completed_at = %s
-                WHERE session_id = %s
-                """
-
-                params = [
-                    results.get('sample_count', 0),
-                    results.get('feature_count', 0),
-                    model_name,
-                    json.dumps(results.get('parameters', {})),
-                    f"./output_train/{model_name}",
-                    metrics.get('train_auc', 0.0),
-                    metrics.get('val_auc', 0.0),
-                    metrics.get('roc_auc', 0.0),
-                    metrics.get('accuracy', 0.0),
-                    metrics.get('precision', 0.0),
-                    metrics.get('recall', 0.0),
-                    metrics.get('f1', 0.0),
-                    datetime.now(),
-                    session_id
-                ]
-
-                cursor.execute(sql, params)
-                conn.commit()
-                logger.info(f"Updated training session: {session_id}")
-            else:
-                logger.warning("No training session found to update")
-
-            conn.close()
-
-        except Exception as e:
-            logger.warning(f"Failed to update training session: {e}")
+        logger.info("❌ Training session update disabled per client requirement")
 
     def hyperparameter_tuning(self, X_train: pd.DataFrame, y_train: pd.Series,
                             X_val: pd.DataFrame, y_val: pd.Series) -> dict:

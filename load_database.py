@@ -313,21 +313,11 @@ def main():
     # Initialize database loader
     loader = DatabaseLoader(data_filter, args.output_dir, enable_db_storage)
 
-    # Create training session if database storage is enabled
+    # DATABASE STORAGE DISABLED per client requirement
+    # Client tidak mau: xgboost_training_sessions, xgboost_features, xgboost_evaluations
     if enable_db_storage and loader.db_storage:
-        try:
-            session_id = loader.db_storage.create_training_session(
-                exchange_filter=data_filter.exchange_filter,
-                symbol_filter=data_filter.pair_filter or data_filter.symbol_filter,
-                interval_filter=data_filter.interval_filter,
-                time_range=data_filter.time_range,
-                days_filter=data_filter.days_filter,
-                notes="Data loading phase"
-            )
-            logger.info(f"Created training session: {session_id}")
-        except Exception as e:
-            logger.warning(f"Failed to create training session: {e}")
-            loader.db_storage = None  # Disable further DB operations
+        logger.info("📝 Training session creation disabled per client requirement")
+        loader.db_storage = None  # Disable further DB operations
 
     try:
         # Try to load from database first

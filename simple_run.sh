@@ -54,19 +54,6 @@ run_step "label_builder.py" "Step 4: Label Building"
 run_step "xgboost_trainer.py" "Step 5: Model Training"
 run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation"
 
-# Step 7: Restructure output directory
-echo "=========================================="
-echo "Step 7: Restructuring Output Directory"
-echo "Command: python restructure_output_train.py"
-echo "=========================================="
-
-if python restructure_output_train.py; then
-    echo "✅ Step 7 completed successfully"
-    echo ""
-else
-    echo "⚠️ Step 7 had issues, but pipeline completed"
-    echo ""
-fi
 
 echo "=========================================="
 echo "✅ Pipeline completed successfully!"

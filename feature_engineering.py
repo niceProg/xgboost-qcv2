@@ -381,66 +381,9 @@ class FeatureEngineer:
 
         # Duplicate line removed
 
-        # Save engineered features to database if enabled
-        if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
-            try:
-                from database_storage import DatabaseStorage
-                import pymysql
-                from dotenv import load_dotenv
-                load_dotenv()
-
-                conn = pymysql.connect(
-                    host=os.getenv('DB_HOST', '103.150.81.86'),
-                    port=int(os.getenv('DB_PORT', 3306)),
-                    database=os.getenv('DB_NAME', 'xgboostqc'),
-                    user=os.getenv('DB_USER', 'xgboostqc'),
-                    password=os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
-                )
-                cursor = conn.cursor()
-
-                cursor.execute(
-                    "SELECT session_id FROM xgboost_training_sessions "
-                    "WHERE status = 'data_loaded' ORDER BY created_at DESC LIMIT 1"
-                )
-                result = cursor.fetchone()
-                conn.close()
-
-                if result:
-                    session_id = result[0]
-
-                    # Store feature data sample
-                    sample_df = df.head(100)  # First 100 rows
-                    db_storage = DatabaseStorage()
-                    db_storage.store_feature_data(
-                        session_id=session_id,
-                        feature_type='engineered_features',
-                        data=sample_df,
-                        description=f"Engineered features from {len(feature_cols)} features, {len(df)} total rows, showing sample of 100"
-                    )
-                    logger.info(f"Stored engineered features sample to database for session: {session_id}")
-
-                    # Store feature schema
-                    schema_info = {
-                        'total_features': len(feature_cols),
-                        'feature_list': feature_cols,
-                        'feature_categories': {
-                            'price_features': [f for f in feature_cols if f.startswith('price_')],
-                            'funding_features': [f for f in feature_cols if f.startswith('funding_')],
-                            'basis_features': [f for f in feature_cols if f.startswith('basis_')],
-                            'ls_features': [f for f in feature_cols if f.startswith('ls_')],
-                            'cross_features': [f for f in feature_cols if f.startswith('cross_')]
-                        }
-                    }
-                    db_storage.store_feature_data(
-                        session_id=session_id,
-                        feature_type='feature_schema',
-                        data=pd.DataFrame([schema_info]),
-                        description="Feature engineering schema and metadata"
-                    )
-                    logger.info(f"Stored feature schema to database")
-
-            except Exception as e:
-                logger.warning(f"Failed to save engineered features to database: {e}")
+        # DATABASE STORAGE DISABLED per client requirement
+        # Client tidak mau: xgboost_evaluations, xgboost_features, xgboost_training_sessions
+        logger.info("📝 Feature database storage disabled per client requirement")
 
 def main():
     """Main function to engineer features."""

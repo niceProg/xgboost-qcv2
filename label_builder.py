@@ -33,6 +33,36 @@ class LabelBuilder:
         self.data_filter = data_filter
         self.output_dir = Path(output_dir)
         self.label_col = 'target'
+        self.session_id = self._generate_session_id()
+        # Store training parameters for database storage
+        self.exchange = getattr(data_filter, 'exchange', 'N/A') if hasattr(data_filter, 'exchange') else 'N/A'
+        self.pair = getattr(data_filter, 'pair', 'N/A') if hasattr(data_filter, 'pair') else 'N/A'
+        self.interval = getattr(data_filter, 'interval', 'N/A') if hasattr(data_filter, 'interval') else 'N/A'
+
+    def _generate_session_id(self) -> str:
+        """Generate unique session ID using timestamp."""
+        return f"label_builder_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    def _format_timestamp(self, ts, jakarta_tz):
+        """Format timestamp safely for display."""
+        try:
+            import pytz
+            if isinstance(ts, (int, float)):
+                # Unix timestamp in milliseconds
+                dt = datetime.fromtimestamp(ts/1000, tz=pytz.UTC)
+            elif hasattr(ts, 'timestamp'):
+                # Pandas Timestamp object
+                dt = ts.to_pydatetime().replace(tzinfo=pytz.UTC)
+            else:
+                # Try direct parsing
+                dt = pd.to_datetime(ts)
+                if dt.tz is None:
+                    dt = dt.tz_localize(pytz.UTC)
+
+            return dt.astimezone(jakarta_tz).strftime('%Y-%m-%d %H:%M:%S WIB')
+        except Exception as e:
+            logger.warning(f"Could not format timestamp {ts}: {e}")
+            return str(ts)
 
     def load_feature_data(self) -> pd.DataFrame:
         """Load engineered features data."""
@@ -256,84 +286,176 @@ class LabelBuilder:
                 f.write(f"{feature}\n")
         logger.info(f"Training feature list saved to {feature_list_file}")
 
-        # Save dataset summary
-        summary_file = self.output_dir / 'dataset_summary.txt'
+        # Save dataset summary with structured path
+        import pytz
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+        current_time = datetime.now(jakarta_tz)
+
+        # Create structured directory
+        dataset_dir = self.output_dir / 'datasets' / 'summary'
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create timestamped filename
+        timestamp = current_time.strftime('%Y%m%d_%H%M%S')
+        summary_file = dataset_dir / f'dataset_summary_{timestamp}.txt'
+
+        # Generate summary content
+        summary_content = f"""Dataset Summary
+{"=" * 20}
+
+Training Session Info:
+- Timestamp: {current_time.strftime('%Y-%m-%d %H:%M:%S WIB')}
+- Session ID: {self.session_id}
+- Exchange: {getattr(self, 'exchange', 'N/A')}
+- Pair: {getattr(self, 'pair', 'N/A')}
+- Interval: {getattr(self, 'interval', 'N/A')}
+
+Dataset Statistics:
+- Total samples: {len(df):,}
+- Features: {len(X.columns)}
+- Label distribution:
+  * Bullish (1): {y.sum():,} ({y.mean()*100:.1f}%)
+  * Bearish (0): {len(y) - y.sum():,} ({(1-y.mean())*100:.1f}%)
+
+Time Range:
+- Start: {df['time'].min()} ({self._format_timestamp(df['time'].min(), jakarta_tz)})
+- End: {df['time'].max()} ({self._format_timestamp(df['time'].max(), jakarta_tz)})
+
+Data Sources:
+- Exchanges: {list(df['exchange'].unique())}
+- Symbols: {list(df['symbol'].unique())}
+- Intervals: {list(df['interval'].unique())}
+
+Feature Columns:
+{chr(10).join(f"- {feature}" for feature in sorted(X.columns))}
+"""
+
+        # Save to file
         with open(summary_file, 'w') as f:
-            f.write("Dataset Summary\n")
-            f.write("=" * 20 + "\n\n")
-            f.write(f"Total samples: {len(df)}\n")
-            f.write(f"Features: {len(X.columns)}\n")
-            f.write(f"Label distribution:\n")
-            f.write(f"  Bullish (1): {y.sum()} ({y.mean()*100:.1f}%)\n")
-            f.write(f"  Bearish (0): {len(y) - y.sum()} {(1-y.mean())*100:.1f}%)\n\n")
-            f.write(f"Time range: {df['time'].min()} to {df['time'].max()}\n")
-            f.write(f"Exchanges: {list(df['exchange'].unique())}\n")
-            f.write(f"Symbols: {list(df['symbol'].unique())}\n")
-            f.write(f"Intervals: {list(df['interval'].unique())}\n")
+            f.write(summary_content)
+
         logger.info(f"Dataset summary saved to {summary_file}")
 
-        # Save labeled data to database if enabled
-        if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
-            try:
-                from database_storage import DatabaseStorage
-                import pymysql
-                from dotenv import load_dotenv
-                load_dotenv()
+        # Save to database using new method (xgboost_dataset_summary only - per client requirement)
+        try:
+            from database_storage import DatabaseStorage
 
-                conn = pymysql.connect(
-                    host=os.getenv('DB_HOST', '103.150.81.86'),
-                    port=int(os.getenv('DB_PORT', 3306)),
-                    database=os.getenv('DB_NAME', 'xgboostqc'),
-                    user=os.getenv('DB_USER', 'xgboostqc'),
-                    password=os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
+            db_storage = DatabaseStorage()
+
+            # Store dataset summary (hanya 3 kolom dengan session_id)
+            db_storage.store_dataset_summary(
+                session_id=self.session_id,
+                summary_file=summary_file.name
+            )
+
+            logger.info("✅ Dataset summary saved to database using new method")
+
+        except Exception as e:
+            logger.error(f"❌ Error saving dataset summary to database: {e}")
+            # Fallback to old method if new method fails
+            self.save_dataset_summary_to_db(summary_content, summary_file.name)
+
+        # DATABASE STORAGE DISABLED for training tables per client requirement
+        # Client hanya mau xgboost_dataset_summary, bukan xgboost_evaluations, xgboost_features, xgboost_training_sessions
+        logger.info("📝 Database storage for training tables disabled per client requirement")
+
+    def save_dataset_summary_to_db(self, summary_content: str, filename: str):
+        """Save dataset summary to xgboost_dataset_summary table"""
+        try:
+            import pymysql
+            from dotenv import load_dotenv
+
+            load_dotenv()
+
+            conn = pymysql.connect(
+                host=os.getenv('TRADING_DB_HOST'),
+                port=int(os.getenv('TRADING_DB_PORT', 3306)),
+                user=os.getenv('TRADING_DB_USER'),
+                password=os.getenv('TRADING_DB_PASSWORD'),
+                database=os.getenv('TRADING_DB_NAME', 'newera')
+            )
+
+            cursor = conn.cursor()
+
+            # Create xgboost_models table only (per client requirement)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS xgboost_models (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    session_id VARCHAR(100) NOT NULL,
+                    model_name VARCHAR(200) NOT NULL,
+                    model_version VARCHAR(50),
+                    model_file VARCHAR(500),
+                    is_latest BOOLEAN DEFAULT FALSE,
+                    model_data LONGBLOB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_session_id (session_id),
+                    INDEX idx_created_at (created_at),
+                    INDEX idx_model_name (model_name),
+                    INDEX idx_is_latest (is_latest)
                 )
-                cursor = conn.cursor()
+            """)
 
-                cursor.execute(
-                    "SELECT session_id FROM xgboost_training_sessions "
-                    "WHERE status = 'data_loaded' ORDER BY created_at DESC LIMIT 1"
+            # Create xgboost_dataset_summary table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS xgboost_dataset_summary (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    training_session_id VARCHAR(100),
+                    summary_file VARCHAR(500),
+                    summary_content TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    exchange VARCHAR(50),
+                    pair VARCHAR(20),
+                    time_interval VARCHAR(20),
+                    total_records INT,
+                    start_time VARCHAR(50),
+                    end_time VARCHAR(50),
+                    INDEX idx_training_session (training_session_id),
+                    INDEX idx_created_at (created_at)
                 )
-                result = cursor.fetchone()
-                conn.close()
+            """)
 
-                if result:
-                    session_id = result[0]
+            # Extract training session info from summary
+            exchange = getattr(self, 'exchange', 'N/A')
+            pair = getattr(self, 'pair', 'N/A')
+            interval = getattr(self, 'interval', 'N/A')
 
-                    # Store labeled data sample
-                    sample_df = df.head(100)  # First 100 rows
-                    db_storage = DatabaseStorage()
-                    db_storage.store_feature_data(
-                        session_id=session_id,
-                        feature_type='labeled_data',
-                        data=sample_df,
-                        description=f"Labeled data for training, {len(df)} total rows, showing sample of 100"
-                    )
-                    logger.info(f"Stored labeled data sample to database for session: {session_id}")
+            # Get total records from summary content
+            total_records = 0
+            for line in summary_content.split('\n'):
+                if 'Total samples:' in line:
+                    try:
+                        total_records = int(line.split(':')[1].strip().replace(',', ''))
+                    except:
+                        pass
+                    break
 
-                    # Store training data metadata
-                    metadata = {
-                        'total_samples': len(df),
-                        'feature_count': len(X.columns),
-                        'bullish_samples': int(y.sum()),
-                        'bearish_samples': int(len(y) - y.sum()),
-                        'bullish_ratio': float(y.mean()),
-                        'bearish_ratio': float(1 - y.mean()),
-                        'feature_list': list(X.columns),
-                        'time_range': {
-                            'start': str(df['time'].min()),
-                            'end': str(df['time'].max())
-                        }
-                    }
-                    db_storage.store_feature_data(
-                        session_id=session_id,
-                        feature_type='training_metadata',
-                        data=pd.DataFrame([metadata]),
-                        description="Training data metadata and label distribution"
-                    )
-                    logger.info(f"Stored training metadata to database")
+            # Insert into database
+            insert_query = """
+            INSERT INTO xgboost_dataset_summary
+            (training_session_id, summary_file, summary_content, exchange, pair, time_interval, total_records)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
 
-            except Exception as e:
-                logger.warning(f"Failed to save labeled data to database: {e}")
+            cursor.execute(insert_query, (
+                self.session_id,
+                filename,
+                summary_content,
+                exchange,
+                pair,
+                interval,
+                total_records
+            ))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.info("✅ Dataset summary saved to database")
+
+        except Exception as e:
+            logger.error(f"❌ Error saving dataset summary to database: {e}")
+            logger.info("   Continuing without database storage...")
+
 
 def main():
     """Main function to build labels."""

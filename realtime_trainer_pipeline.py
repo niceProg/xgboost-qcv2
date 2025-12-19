@@ -141,22 +141,16 @@ class RealtimeTrainerPipeline:
                 # They use different logic for incremental updates
                 # We'll handle incremental mode through minutes filtering instead
 
-                # For real-time triggered training, load fresh data but train FULL model
-                if incremental:
-                    # Load latest data but train complete model (client requirement)
+                # For real-time triggered training - LOAD ALL DATA like manual training (client requirement)
+                if incremental or not incremental:
+                    # ALWAYS load full data - no minutes filtering for real-time training
                     if script == 'load_database.py':
-                        # Load data from last 6 hours to get newest records
-                        cmd.extend(["--minutes", "360"])  # 6 hours = 360 minutes
-                        logger.info(f"⚡ Loading fresh data: --minutes 360 (last 6 hours)")
-                    elif script in ['merge_7_tables.py', 'feature_engineering.py', 'label_builder.py', 'xgboost_trainer.py', 'model_evaluation_with_leverage.py']:
-                        # All other scripts run with full training - no special flags needed
-                        logger.info(f"🔄 Full training with latest data: {script}")
-                else:
-                    # Manual full training mode
-                    if script == 'load_database.py':
-                        logger.info(f"📊 Loading all historical data for full training")
+                        logger.info(f"📊 Loading ALL historical data for full training (client requirement)")
                     else:
                         logger.info(f"🔄 Full training: {script}")
+
+                    # NO --minutes parameter for any script in real-time mode
+                    # This matches manual training: python load_database.py --exchange binance --pair BTCUSDT --interval 1h
 
                 logger.info(f"🏃 Final command: {' '.join(cmd)}")
 

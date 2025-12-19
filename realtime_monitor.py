@@ -577,9 +577,9 @@ class RealtimeDatabaseMonitor:
 ⏰ Time: {now_wib.strftime('%d-%m-%Y %H:%M:%S')} WIB
 
 Action: FULL 6-Step Training Pipeline STARTING
-Status: Complete training with latest 6 hours data
+Status: Complete training with ALL historical data (like manual training)
 Models: Will be saved to ./output_train/models/
-Duration: ~15-30 minutes (full training with fresh data)
+Duration: ~30-60 minutes (full dataset training)
 
 Table Breakdown:
 """ + '\n'.join([f"• {table_names.get(data['table'], data['table'])}: {data['new_count']:,} records ({data.get('priority', 'UNKNOWN')})"

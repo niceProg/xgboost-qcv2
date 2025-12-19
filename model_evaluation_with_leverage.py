@@ -593,128 +593,19 @@ class ModelEvaluator:
         # Save to database if enabled
         if os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true':
             self.save_evaluation_to_database(metrics, report, timestamp)
-            self.update_session_trading_metrics(metrics, report)
+            # DATABASE STORAGE DISABLED per client requirement
+            # self.update_session_trading_metrics(metrics, report)
 
     def save_evaluation_to_database(self, metrics: dict, report: dict, timestamp: str):
         """Save evaluation results to xgboostqc database."""
-        try:
-            from database_storage import DatabaseStorage
+        # DATABASE STORAGE DISABLED per client requirement
+        # Client tidak mau: xgboost_evaluations, xgboost_features, xgboost_training_sessions
+        logger.info("📝 Evaluation database storage disabled per client requirement")
 
-            # Use xgboostqc database config
-            db_storage = DatabaseStorage(
-                db_config={
-                    'host': os.getenv('DB_HOST', '103.150.81.86'),
-                    'port': int(os.getenv('DB_PORT', 3306)),
-                    'database': os.getenv('DB_NAME', 'xgboostqc'),
-                    'user': os.getenv('DB_USER', 'xgboostqc'),
-                    'password': os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
-                }
-            )
-
-            # Get model info
-            model_path = self.output_dir / "latest_model.joblib"
-            model_name = os.path.basename(model_path) if model_path.exists() else "unknown_model"
-
-            # Store evaluation results
-            db_storage.store_evaluation_results(
-                eval_type='trading_performance',
-                metrics=metrics,
-                eval_params={
-                    'model_name': model_name,
-                    'initial_cash': float(os.getenv('INITIAL_CASH', 1000)),
-                    'leverage': float(os.getenv('LEVERAGE', 10)),
-                    'margin_fraction': float(os.getenv('MARGIN_FRACTION', 0.2)),
-                    'fee_rate': float(os.getenv('FEE_RATE', 0.0004)),
-                    'threshold': float(os.getenv('THRESHOLD', 0.5))
-                },
-                detailed_results=report
-            )
-
-            logger.info("Evaluation results saved to database")
-
-        except Exception as e:
-            logger.warning(f"Failed to save evaluation to database: {e}")
-
+    # METHOD DISABLED per client requirement
     def update_session_trading_metrics(self, metrics: dict, report: dict):
         """Update training session with trading performance metrics."""
-        try:
-            import pymysql
-            from dotenv import load_dotenv
-
-            load_dotenv()
-
-            # Database config
-            db_config = {
-                'host': os.getenv('DB_HOST', '103.150.81.86'),
-                'port': int(os.getenv('DB_PORT', 3306)),
-                'database': os.getenv('DB_NAME', 'xgboostqc'),
-                'user': os.getenv('DB_USER', 'xgboostqc'),
-                'password': os.getenv('DB_PASSWORD', '6SPxBDwXH6WyxpfT')
-            }
-
-            conn = pymysql.connect(**db_config)
-            cursor = conn.cursor()
-
-            # Get the latest completed session
-            cursor.execute(
-                "SELECT session_id FROM xgboost_training_sessions "
-                "WHERE status = 'completed' "
-                "ORDER BY created_at DESC LIMIT 1"
-            )
-            result = cursor.fetchone()
-
-            if result:
-                session_id = result[0]
-
-                # Build comprehensive notes with trading metrics
-                strategy_summary = report.get('strategy_summary', {})
-                performance_metrics = strategy_summary.get('performance_metrics', {})
-                trading_activity = strategy_summary.get('trading_activity', {})
-
-                notes = f"""Training completed successfully.
-
-Trading Performance:
-- Total Return: {performance_metrics.get('total_return', 0):.2%}
-- CAGR: {performance_metrics.get('cagr', 0):.2%}
-- Sharpe Ratio: {performance_metrics.get('sharpe_ratio', 0):.2f}
-- Win Rate: {performance_metrics.get('win_rate', 0):.2%}
-- Profit Factor: {performance_metrics.get('profit_factor', 0):.2f}
-- Max Drawdown: {performance_metrics.get('max_drawdown', 0):.2%}
-- Total Trades: {trading_activity.get('total_trades', 0)}
-- Winning Trades: {trading_activity.get('winning_trades', 0)}
-- Losing Trades: {trading_activity.get('losing_trades', 0)}
-
-Trading Period: {strategy_summary.get('trading_period', {}).get('start_date', '')} to {strategy_summary.get('trading_period', {}).get('end_date', '')}
-Trading Days: {strategy_summary.get('trading_period', {}).get('total_days', 0)}"""
-
-                # Update the session with trading metrics
-                sql = """
-                UPDATE xgboost_training_sessions SET
-                    total_return = %s,
-                    sharpe_ratio = %s,
-                    max_drawdown = %s,
-                    notes = %s
-                WHERE session_id = %s
-                """
-
-                params = [
-                    performance_metrics.get('total_return', 0.0),
-                    performance_metrics.get('sharpe_ratio', 0.0),
-                    performance_metrics.get('max_drawdown', 0.0),
-                    notes,
-                    session_id
-                ]
-
-                cursor.execute(sql, params)
-                conn.commit()
-                logger.info(f"Updated trading metrics for session: {session_id}")
-            else:
-                logger.warning("No completed training session found to update")
-
-            conn.close()
-
-        except Exception as e:
-            logger.warning(f"Failed to update session trading metrics: {e}")
+        logger.info("❌ Session trading metrics update disabled per client requirement")
 
 
 def main():
