@@ -355,16 +355,15 @@ class RealtimeDatabaseMonitor:
             exchange_col = table_config.get('exchange_col', 'exchange')  # Default to 'exchange'
             exchanges = self.config['exchanges']
 
-            # Query berdasarkan created_at column
+            # OPTIMIZED Query - Simple and fast
             query = f"""
             SELECT
                 COUNT(*) as new_count,
-                MAX(created_at) as latest_created,
-                MIN(created_at) as earliest_created,
-                COUNT(CASE WHEN created_at > DATE_SUB(NOW(), INTERVAL {check_window} SECOND) THEN 1 END) as recent_count
+                MAX(created_at) as latest_created
             FROM {table}
             WHERE created_at > DATE_SUB(NOW(), INTERVAL {check_window} SECOND)
             AND `{exchange_col}` IN %s
+            LIMIT 1
             """
 
             cursor.execute(query, (exchanges,))
@@ -391,11 +390,10 @@ class RealtimeDatabaseMonitor:
                 new_data = {
                     'table': table,
                     'new_count': new_count,
-                    'earliest_created': result[1] if result[1] else None,
-                    'latest_created': result[2] if result[2] else None,
-                    'recent_count': result[3] if result[3] else 0,
+                    'latest_created': result[1] if result[1] else None,
+                    'recent_count': new_count,  # All records are recent now
                     'priority': priority,
-                    'detection_method': 'created_based_monitoring'
+                    'detection_method': 'optimized_monitoring'
                 }
 
                 # Smart threshold checking
@@ -413,16 +411,15 @@ class RealtimeDatabaseMonitor:
                     priority = "URGENT"
                     trigger_reason = f"Urgent threshold: {result[0]} >= {table_config['urgent_threshold']}"
 
-                # Condition 3: Recent high-frequency activity
-                elif result[3] and result[3] >= table_config['urgent_threshold']:
+                # Condition 3: Recent high-frequency activity (using new_count)
+                elif new_count >= table_config['urgent_threshold']:
                     should_trigger = True
-                    priority = "HIGH_PRIORITY"
-                    trigger_reason = f"Recent activity: {result[3]} records in last {realtime_window} seconds"
+                    priority = "URGENT"
+                    trigger_reason = f"Urgent activity: {new_count} records in last {check_window} seconds"
 
                 if should_trigger:
                     logger.info(f"📊 New data in {table}: {result[0]} records (Priority: {priority})")
-                    logger.info(f"   Created time range: {new_data['earliest_created']} to {new_data['latest_created']}")
-                    logger.info(f"   Recent records: {new_data.get('recent_count', 0)}")
+                    logger.info(f"   Latest created: {new_data['latest_created']}")
                     logger.info(f"   Reason: {trigger_reason}")
 
                     cursor.close()

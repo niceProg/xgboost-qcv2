@@ -1,0 +1,56 @@
+2025-12-19 14:44:55,051 - INFO - 🤖 Real-time XGBoost Trainer (CORE Pipeline Integration)
+2025-12-19 14:44:55,051 - INFO - ============================================================
+2025-12-19 14:44:55,052 - INFO - 🚀 Real-time trainer initialized
+2025-12-19 14:44:55,052 - INFO - 📁 Output directory: output_train
+2025-12-19 14:44:55,052 - INFO - 🤖 Using CORE pipeline (6 steps)
+2025-12-19 14:44:55,052 - INFO - 🚀 Starting real-time training (mode: incremental)
+2025-12-19 14:44:55,052 - INFO - 📋 No trigger file found
+2025-12-19 14:44:55,053 - INFO - 🔍 Checking for new data (last run: Never)
+2025-12-19 14:44:55,053 - INFO - 🔥 Starting CORE training pipeline
+2025-12-19 14:44:55,053 - INFO - 📋 Step 1: load_database.py
+2025-12-19 14:44:55,053 - INFO - 📂 Scripts directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-19 14:44:55,053 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-19 14:44:55,053 - INFO - 🔧 Step 1: Load Database (Market Data)
+2025-12-19 14:44:55,054 - INFO - 🏃 Running: python3 load_database.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:44:55,054 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-19 14:44:55,054 - INFO - 📄 Script path: load_database.py
+2025-12-19 14:44:55,054 - INFO - 📁 Script exists: True
+2025-12-19 14:44:55,054 - INFO - ⚡ Added real-time filter: --minutes 1
+2025-12-19 14:44:55,054 - INFO - 🏃 Final command: python3 load_database.py --exchange binance --pair BTCUSDT --interval 1h --minutes 1
+2025-12-19 14:45:07,273 - INFO - ✅ Step 1 completed successfully
+2025-12-19 14:45:07,274 - INFO - 📄 Output: === Active Filters ===
+Mode: initial
+Exchange(s): binance
+Pair(s): BTCUSDT
+Interval(s): 1h
+Time Filter: Last 1 minutes (Real-time)
+Minutes: 1
+====================
+
+2025-12-19 14:45:07,274 - INFO - 🔧 Step 2: Merge Tables
+2025-12-19 14:45:07,274 - INFO - 🏃 Running: python3 merge_7_tables.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:45:07,274 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-19 14:45:07,274 - INFO - 📄 Script path: merge_7_tables.py
+2025-12-19 14:45:07,274 - INFO - 📁 Script exists: True
+2025-12-19 14:45:07,274 - INFO - 🏃 Final command: python3 merge_7_tables.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:45:10,156 - INFO - ✅ Step 2 completed successfully
+2025-12-19 14:45:10,156 - INFO - 🔧 Step 3: Feature Engineering
+2025-12-19 14:45:10,156 - INFO - 🏃 Running: python3 feature_engineering.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:45:10,156 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-19 14:45:10,156 - INFO - 📄 Script path: feature_engineering.py
+2025-12-19 14:45:10,156 - INFO - 📁 Script exists: True
+2025-12-19 14:45:10,156 - INFO - 🏃 Final command: python3 feature_engineering.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:45:13,205 - INFO - ✅ Step 3 completed successfully
+2025-12-19 14:45:13,205 - INFO - 🔧 Step 4: Label Building
+2025-12-19 14:45:13,206 - INFO - 🏃 Running: python3 label_builder.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:45:13,206 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-19 14:45:13,206 - INFO - 📄 Script path: label_builder.py
+2025-12-19 14:45:13,206 - INFO - 📁 Script exists: True
+2025-12-19 14:45:13,206 - INFO - 🏃 Final command: python3 label_builder.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:45:15,935 - INFO - ✅ Step 4 completed successfully
+2025-12-19 14:45:15,935 - INFO - 🔧 Step 5: Model Training
+2025-12-19 14:45:15,935 - INFO - 🏃 Running: python3 xgboost_trainer.py --exchange binance --pair BTCUSDT --interval 1h
+2025-12-19 14:45:15,936 - INFO - 📍 Working directory: /home/yumna/Working/dragonfortune/xgboost-qc
+2025-12-19 14:45:15,936 - INFO - 📄 Script path: xgboost_trainer.py
+2025-12-19 14:45:15,936 - INFO - 📁 Script exists: True
+2025-12-19 14:45:15,936 - INFO - 🏃 Final command: python3 xgboost_trainer.py --exchange binance --pair BTCUSDT --interval 1h

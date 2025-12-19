@@ -1,0 +1,16 @@
+{
+  "last_processed": {
+    "cg_spot_price_history": "2025-01-01T00:00:00",
+    "cg_funding_rate_history": "2025-01-01T00:00:00",
+    "cg_futures_basis_history": "2025-12-19T07:44:23",
+    "cg_spot_aggregated_taker_volume_history": "2025-12-19T07:44:46",
+    "cg_long_short_global_account_ratio_history": "2025-01-01T00:00:00",
+    "cg_long_short_top_account_ratio_history": "2025-01-01T00:00:00"
+  },
+  "last_check_time": {
+    "cg_spot_price_history": "2025-12-19T14:44:49.891284+07:00",
+    "cg_funding_rate_history": "2025-12-19T14:44:50.041611+07:00",
+    "cg_long_short_global_account_ratio_history": "2025-12-19T14:44:53.212160+07:00",
+    "cg_long_short_top_account_ratio_history": "2025-12-19T14:44:53.308706+07:00"
+  }
+}
