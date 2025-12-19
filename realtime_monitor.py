@@ -576,10 +576,10 @@ class RealtimeDatabaseMonitor:
 📊 Tables: {readable_tables}
 ⏰ Time: {now_wib.strftime('%d-%m-%Y %H:%M:%S')} WIB
 
-Action: Training pipeline STARTING NOW
-Status: 6-step CORE pipeline running automatically
+Action: FULL 6-Step Training Pipeline STARTING
+Status: Complete training with latest 6 hours data
 Models: Will be saved to ./output_train/models/
-Duration: ~5-15 minutes (monitor ./logs/realtime_monitor.log)
+Duration: ~15-30 minutes (full training with fresh data)
 
 Table Breakdown:
 """ + '\n'.join([f"• {table_names.get(data['table'], data['table'])}: {data['new_count']:,} records ({data.get('priority', 'UNKNOWN')})"
