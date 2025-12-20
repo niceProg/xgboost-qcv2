@@ -1,5 +1,6 @@
 .xgboost-qc
 ./output_train/
 .env
+.env.production
 __pycache__/
 .claude/
