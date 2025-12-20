@@ -6,7 +6,7 @@ services:
     container_name: xgboost-api
     # No external port mapping - only accessible through Nginx reverse proxy
     # ports:
-    #   - "5000:5000"
+    #   - "8000:8000"
     env_file:
       - .env.production
     environment:
@@ -22,7 +22,7 @@ services:
       - xgboost-network
     restart: unless-stopped
     # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+    #   test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
     #   interval: 30s
     #   timeout: 10s
     #   retries: 3
