@@ -11,11 +11,12 @@ import json
 import pickle
 import logging
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from pathlib import Path
 
-from flask import Flask, jsonify, request
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 # Database imports
 from database_storage import DatabaseStorage
@@ -31,8 +32,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for QuantConnect
+# FastAPI app
+app = FastAPI(
+    title="XGBoost Trading Model API",
+    description="API for XGBoost trading models and dataset summaries for QuantConnect",
+    version="1.0.0"
+)
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize database storage
 try:
@@ -41,6 +55,50 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to connect to database: {e}")
     db_storage = None
+
+# Pydantic models for response
+class HealthResponse(BaseModel):
+    status: str
+    timestamp: str
+    database_connected: bool
+
+class ModelResponse(BaseModel):
+    success: bool
+    session_id: str
+    model_name: str
+    model_version: str
+    model_file: str
+    created_at: Optional[str]
+    model_data_base64: str
+    feature_names: List[str]
+    content_type: str
+    file_extension: str
+
+class DatasetSummaryResponse(BaseModel):
+    success: bool
+    session_id: str
+    summary_file: str
+    created_at: str
+    summary_data_base64: Optional[str]
+    content_type: str
+    file_extension: str
+
+class SessionInfo(BaseModel):
+    session_id: str
+    model_name: str
+    model_version: Optional[str]
+    is_latest: bool
+    created_at: str
+    has_dataset_summary: bool
+
+class SessionsResponse(BaseModel):
+    success: bool
+    total_sessions: int
+    sessions: List[SessionInfo]
+
+class ErrorResponse(BaseModel):
+    error: str
+    message: str
 
 def encode_to_base64(data: bytes) -> str:
     """Encode bytes to base64 string."""
@@ -55,24 +113,24 @@ def read_file_as_base64(file_path: str) -> Optional[str]:
         logger.error(f"Failed to read file {file_path}: {e}")
         return None
 
-@app.route('/health', methods=['GET'])
-def health_check():
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
     """Health check endpoint."""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'database_connected': db_storage is not None
-    })
+    return HealthResponse(
+        status="healthy",
+        timestamp=datetime.utcnow().isoformat(),
+        database_connected=db_storage is not None
+    )
 
-@app.route('/api/v1/latest/model', methods=['GET'])
-def get_latest_model():
+@app.get("/api/v1/latest/model", response_model=ModelResponse)
+async def get_latest_model():
     """Get latest trained model with base64 encoding."""
 
     if not db_storage:
-        return jsonify({
-            'error': 'Database not connected',
-            'message': 'Unable to connect to database'
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not connected"
+        )
 
     try:
         # Get latest model from database
@@ -91,39 +149,39 @@ def get_latest_model():
             db_storage.db_model.is_latest == True
         ).first()
 
-        response = {
-            'success': True,
-            'session_id': session_id,
-            'model_name': model_record.model_name if model_record else 'unknown',
-            'model_version': model_record.model_version if model_record else session_id,
-            'model_file': model_record.model_file if model_record else 'latest_model.joblib',
-            'created_at': model_record.created_at.isoformat() if model_record else None,
-            'model_data_base64': model_base64,
-            'feature_names': feature_names,
-            'content_type': 'application/octet-stream',
-            'file_extension': '.joblib'
-        }
+        response = ModelResponse(
+            success=True,
+            session_id=session_id,
+            model_name=model_record.model_name if model_record else 'unknown',
+            model_version=model_record.model_version if model_record else session_id,
+            model_file=model_record.model_file if model_record else 'latest_model.joblib',
+            created_at=model_record.created_at.isoformat() if model_record else None,
+            model_data_base64=model_base64,
+            feature_names=feature_names,
+            content_type='application/octet-stream',
+            file_extension='.joblib'
+        )
 
         db.close()
         logger.info(f"✅ Retrieved latest model for session: {session_id}")
-        return jsonify(response)
+        return response
 
     except Exception as e:
         logger.error(f"❌ Failed to get latest model: {e}")
-        return jsonify({
-            'error': 'Failed to retrieve model',
-            'message': str(e)
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve model: {str(e)}"
+        )
 
-@app.route('/api/v1/latest/dataset-summary', methods=['GET'])
-def get_latest_dataset_summary():
+@app.get("/api/v1/latest/dataset-summary", response_model=DatasetSummaryResponse)
+async def get_latest_dataset_summary():
     """Get latest dataset summary with base64 encoding."""
 
     if not db_storage:
-        return jsonify({
-            'error': 'Database not connected',
-            'message': 'Unable to connect to database'
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not connected"
+        )
 
     try:
         # Get latest dataset summary from database
@@ -135,10 +193,10 @@ def get_latest_dataset_summary():
         ).order_by(db_storage.db_model.created_at.desc()).first()
 
         if not latest_model:
-            return jsonify({
-                'error': 'No trained models found',
-                'message': 'No models available in database'
-            }), 404
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No trained models found"
+            )
 
         # Get corresponding dataset summary
         summary_record = db.query(db_storage.db_dataset_summary).filter(
@@ -146,10 +204,10 @@ def get_latest_dataset_summary():
         ).first()
 
         if not summary_record:
-            return jsonify({
-                'error': 'Dataset summary not found',
-                'message': f'No dataset summary found for session: {latest_model.session_id}'
-            }), 404
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No dataset summary found for session: {latest_model.session_id}"
+            )
 
         # Try to read the actual summary file
         summary_base64 = None
@@ -167,36 +225,38 @@ def get_latest_dataset_summary():
                 summary_base64 = read_file_as_base64(path)
                 break
 
-        response = {
-            'success': True,
-            'session_id': summary_record.session_id,
-            'summary_file': summary_record.summary_file,
-            'created_at': summary_record.created_at.isoformat(),
-            'summary_data_base64': summary_base64,
-            'content_type': 'text/plain',
-            'file_extension': '.txt'
-        }
+        response = DatasetSummaryResponse(
+            success=True,
+            session_id=summary_record.session_id,
+            summary_file=summary_record.summary_file,
+            created_at=summary_record.created_at.isoformat(),
+            summary_data_base64=summary_base64,
+            content_type='text/plain',
+            file_extension='.txt'
+        )
 
         db.close()
         logger.info(f"✅ Retrieved dataset summary for session: {summary_record.session_id}")
-        return jsonify(response)
+        return response
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Failed to get dataset summary: {e}")
-        return jsonify({
-            'error': 'Failed to retrieve dataset summary',
-            'message': str(e)
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve dataset summary: {str(e)}"
+        )
 
-@app.route('/api/v1/model/<session_id>', methods=['GET'])
-def get_model_by_session(session_id: str):
+@app.get("/api/v1/model/{session_id}", response_model=ModelResponse)
+async def get_model_by_session(session_id: str):
     """Get model by specific session ID."""
 
     if not db_storage:
-        return jsonify({
-            'error': 'Database not connected',
-            'message': 'Unable to connect to database'
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not connected"
+        )
 
     try:
         # Load specific model by session_id
@@ -214,39 +274,39 @@ def get_model_by_session(session_id: str):
             db_storage.db_model.session_id == session_id
         ).first()
 
-        response = {
-            'success': True,
-            'session_id': session_id,
-            'model_name': model_record.model_name if model_record else 'unknown',
-            'model_version': model_record.model_version if model_record else session_id,
-            'model_file': model_record.model_file if model_record else f'model_{session_id}.joblib',
-            'created_at': model_record.created_at.isoformat() if model_record else None,
-            'model_data_base64': model_base64,
-            'feature_names': feature_names,
-            'content_type': 'application/octet-stream',
-            'file_extension': '.joblib'
-        }
+        response = ModelResponse(
+            success=True,
+            session_id=session_id,
+            model_name=model_record.model_name if model_record else 'unknown',
+            model_version=model_record.model_version if model_record else session_id,
+            model_file=model_record.model_file if model_record else f'model_{session_id}.joblib',
+            created_at=model_record.created_at.isoformat() if model_record else None,
+            model_data_base64=model_base64,
+            feature_names=feature_names,
+            content_type='application/octet-stream',
+            file_extension='.joblib'
+        )
 
         db.close()
         logger.info(f"✅ Retrieved model for session: {session_id}")
-        return jsonify(response)
+        return response
 
     except Exception as e:
         logger.error(f"❌ Failed to get model for session {session_id}: {e}")
-        return jsonify({
-            'error': 'Failed to retrieve model',
-            'message': str(e)
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve model: {str(e)}"
+        )
 
-@app.route('/api/v1/dataset-summary/<session_id>', methods=['GET'])
-def get_dataset_summary_by_session(session_id: str):
+@app.get("/api/v1/dataset-summary/{session_id}", response_model=DatasetSummaryResponse)
+async def get_dataset_summary_by_session(session_id: str):
     """Get dataset summary by specific session ID."""
 
     if not db_storage:
-        return jsonify({
-            'error': 'Database not connected',
-            'message': 'Unable to connect to database'
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not connected"
+        )
 
     try:
         # Get dataset summary by session_id
@@ -257,10 +317,10 @@ def get_dataset_summary_by_session(session_id: str):
         ).first()
 
         if not summary_record:
-            return jsonify({
-                'error': 'Dataset summary not found',
-                'message': f'No dataset summary found for session: {session_id}'
-            }), 404
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No dataset summary found for session: {session_id}"
+            )
 
         # Try to read the actual summary file
         summary_base64 = None
@@ -278,36 +338,38 @@ def get_dataset_summary_by_session(session_id: str):
                 summary_base64 = read_file_as_base64(path)
                 break
 
-        response = {
-            'success': True,
-            'session_id': session_id,
-            'summary_file': summary_record.summary_file,
-            'created_at': summary_record.created_at.isoformat(),
-            'summary_data_base64': summary_base64,
-            'content_type': 'text/plain',
-            'file_extension': '.txt'
-        }
+        response = DatasetSummaryResponse(
+            success=True,
+            session_id=session_id,
+            summary_file=summary_record.summary_file,
+            created_at=summary_record.created_at.isoformat(),
+            summary_data_base64=summary_base64,
+            content_type='text/plain',
+            file_extension='.txt'
+        )
 
         db.close()
         logger.info(f"✅ Retrieved dataset summary for session: {session_id}")
-        return jsonify(response)
+        return response
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Failed to get dataset summary for session {session_id}: {e}")
-        return jsonify({
-            'error': 'Failed to retrieve dataset summary',
-            'message': str(e)
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve dataset summary: {str(e)}"
+        )
 
-@app.route('/api/v1/sessions', methods=['GET'])
-def list_sessions():
+@app.get("/api/v1/sessions", response_model=SessionsResponse)
+async def list_sessions():
     """List all available training sessions."""
 
     if not db_storage:
-        return jsonify({
-            'error': 'Database not connected',
-            'message': 'Unable to connect to database'
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not connected"
+        )
 
     try:
         db = db_storage.get_session()
@@ -324,29 +386,29 @@ def list_sessions():
                 db_storage.db_dataset_summary.session_id == model.session_id
             ).first() is not None
 
-            sessions.append({
-                'session_id': model.session_id,
-                'model_name': model.model_name,
-                'model_version': model.model_version,
-                'is_latest': model.is_latest,
-                'created_at': model.created_at.isoformat(),
-                'has_dataset_summary': summary_exists
-            })
+            sessions.append(SessionInfo(
+                session_id=model.session_id,
+                model_name=model.model_name,
+                model_version=model.model_version,
+                is_latest=model.is_latest,
+                created_at=model.created_at.isoformat(),
+                has_dataset_summary=summary_exists
+            ))
 
         db.close()
 
-        return jsonify({
-            'success': True,
-            'total_sessions': len(sessions),
-            'sessions': sessions
-        })
+        return SessionsResponse(
+            success=True,
+            total_sessions=len(sessions),
+            sessions=sessions
+        )
 
     except Exception as e:
         logger.error(f"❌ Failed to list sessions: {e}")
-        return jsonify({
-            'error': 'Failed to retrieve sessions',
-            'message': str(e)
-        }), 500
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve sessions: {str(e)}"
+        )
 
 # Database model references (to avoid circular imports)
 def init_db_models():
@@ -359,12 +421,13 @@ def init_db_models():
 # Initialize database models
 init_db_models()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    import uvicorn
+
     port = int(os.getenv('API_PORT', 5000))
     host = os.getenv('API_HOST', '0.0.0.0')
-    debug = os.getenv('API_DEBUG', 'False').lower() == 'true'
 
-    logger.info(f"🚀 Starting XGBoost API server on {host}:{port}")
+    logger.info(f"🚀 Starting XGBoost FastAPI server on {host}:{port}")
     logger.info("📊 Available endpoints:")
     logger.info("   GET /health - Health check")
     logger.info("   GET /api/v1/latest/model - Get latest model")
@@ -372,5 +435,6 @@ if __name__ == '__main__':
     logger.info("   GET /api/v1/model/<session_id> - Get model by session")
     logger.info("   GET /api/v1/dataset-summary/<session_id> - Get dataset summary by session")
     logger.info("   GET /api/v1/sessions - List all sessions")
+    logger.info("📖 API docs available at: http://localhost:5000/docs")
 
-    app.run(host=host, port=port, debug=debug)
+    uvicorn.run(app, host=host, port=port)

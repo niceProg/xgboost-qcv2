@@ -26,5 +26,5 @@ EXPOSE 5000
 # Health check
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-# Run the API server
-CMD ["python", "xgboost_api.py"]
+# Run the FastAPI server
+CMD ["uvicorn", "xgboost_api:app", "--host", "0.0.0.0", "--port", "5000"]
