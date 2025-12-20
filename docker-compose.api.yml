@@ -6,11 +6,12 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: xgboost-api
-    ports:
-      - "5000:5000"
+    # No external port mapping - only accessible through Nginx reverse proxy
+    # ports:
+    #   - "5000:5000"
     env_file:
       - .env.production
-    restart: unless-stopped
+    environment:
       # Database configuration
       - DB_HOST=${DB_HOST:-103.150.81.86}
       - DB_PORT=${DB_PORT:-3306}
