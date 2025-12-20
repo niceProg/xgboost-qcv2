@@ -27,7 +27,7 @@ if [ -f .env.production ]; then
 else
     echo "⚠️ .env.production not found, using defaults"
     export API_HOST=${API_HOST:-0.0.0.0}
-    export API_PORT=${API_PORT:-5000}
+    export API_PORT=${API_PORT:-8000}
     export API_DEBUG=${API_DEBUG:-false}
 
     # Database configuration (can be overridden)
@@ -64,7 +64,7 @@ echo "⏳ Waiting for API to be healthy..."
 sleep 10
 
 # Check if API is running (internal container check)
-if docker exec xgboost-api curl -f http://localhost:5000/health > /dev/null 2>&1; then
+if docker exec xgboost-api curl -f http://localhost:8000/health > /dev/null 2>&1; then
     echo "✅ XGBoost API is running successfully!"
     echo ""
     echo "🌐 API Only accessible through domain:"
