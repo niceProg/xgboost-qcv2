@@ -291,29 +291,25 @@ class RealtimeTrainerPipeline:
             logger.warning(f"⚠️ Could not save training history to database: {e}")
             # Continue without database storage - not critical
 
-    def run_training(self, mode: str = 'incremental') -> bool:
+    def run_training(self) -> bool:
         """
         Main training execution method
-        Integrates with CORE 6-step pipeline
+        Integrates with CORE 6-step pipeline with full historical data
         """
-        logger.info(f"🚀 Starting real-time training (mode: {mode})")
+        logger.info("🚀 Starting real-time training with FULL historical data")
 
         # Load trigger data if available
         trigger_data = self.load_trigger_data()
 
-        # Real-time: Always run training to check for new data
-        if mode == 'incremental':
-            last_training = self.get_last_training_time()
-
-            # Always proceed - real-time means checking for new data each time
-            if trigger_data:
-                logger.info(f"🚀 Training triggered by new data: {trigger_data.get('tables_with_new_data', [])}")
-            else:
-                logger.info(f"🔍 Checking for new data (last run: {datetime.now() - last_training if last_training else 'Never'})")
+        # Always proceed with full training
+        if trigger_data:
+            logger.info(f"🚀 Training triggered by new data: {trigger_data.get('tables_with_new_data', [])}")
+        else:
+            logger.info("🔍 Starting full training pipeline check")
 
         try:
-            # Run CORE pipeline (this integrates with 6 core files)
-            success = self.run_core_pipeline(incremental=(mode == 'incremental'))
+            # Run CORE pipeline with full historical data (incremental=False)
+            success = self.run_core_pipeline(incremental=False)
 
             if success:
                 # Validate models were created
@@ -344,22 +340,21 @@ class RealtimeTrainerPipeline:
 
 def main():
     """Main execution function"""
-    parser = argparse.ArgumentParser(description='Real-time XGBoost Trainer with CORE Pipeline')
-    parser.add_argument('--mode', choices=['incremental', 'full'], default='incremental',
-                      help='Training mode (default: incremental)')
+    parser = argparse.ArgumentParser(description='Real-time XGBoost Trainer with FULL Historical Data')
     parser.add_argument('--output-dir', default='./output_train',
                       help='Output directory (default: ./output_train)')
 
     args = parser.parse_args()
 
     logger.info("🤖 Real-time XGBoost Trainer (CORE Pipeline Integration)")
+    logger.info("📊 Mode: FULL TRAINING with ALL historical data")
     logger.info("=" * 60)
 
     # Initialize trainer
     trainer = RealtimeTrainerPipeline(args.output_dir)
 
-    # Run training
-    success = trainer.run_training(args.mode)
+    # Run training (always full data)
+    success = trainer.run_training()
 
     if success:
         logger.info("🎉 Training completed successfully!")

@@ -13,7 +13,7 @@ import os
 from datetime import datetime
 
 # API Configuration
-API_BASE_URL = "http://your-api-server:5000"  # Replace with your actual API server URL
+API_BASE_URL = "https://api.dragonfortune.ai"  # Dragon Fortune API domain
 API_TIMEOUT = 30  # seconds
 
 class XGBoostQuantConnectAPI:

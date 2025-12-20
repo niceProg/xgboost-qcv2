@@ -474,17 +474,17 @@ class RealtimeDatabaseMonitor:
             # Update last_processed times to latest data
             self.update_last_processed(new_data_list)
 
-            # Directly run training pipeline
-            logger.info(f"🚀 Starting training pipeline for {len(new_data_list)} tables...")
+            # Directly run training pipeline (always full historical data)
+            logger.info(f"🚀 Starting FULL training pipeline for {len(new_data_list)} tables...")
 
             import subprocess
             cmd = [
                 'python3', 'realtime_trainer_pipeline.py',
-                '--mode', 'incremental',
                 '--output-dir', './output_train'
             ]
 
             logger.info(f"🏃 Running: {' '.join(cmd)}")
+            logger.info("📊 Mode: Loading ALL historical data (client requirement)")
 
             result = subprocess.run(
                 cmd,
@@ -494,7 +494,9 @@ class RealtimeDatabaseMonitor:
             )
 
             if result.returncode == 0:
-                logger.info("✅ Training pipeline completed successfully!")
+                logger.info("✅ FULL training pipeline completed successfully!")
+                logger.info("📈 New models saved to ./output_train/models/")
+                logger.info("🔔 Mode: ALL historical data trained (client requirement)")
                 if result.stdout:
                     # Log last few lines dari output
                     lines = result.stdout.strip().split('\n')
@@ -585,7 +587,7 @@ Table Breakdown:
 """ + '\n'.join([f"• {table_names.get(data['table'], data['table'])}: {data['new_count']:,} records ({data.get('priority', 'UNKNOWN')})"
                  for data in new_data_list]) + f"""
 
-🤖 XGBoost Real-time Monitor
+🤖 XGBoost Real-time Monitor | Dragon Fortune AI
 🔔 Notification #{self.notification_count + 1} | ID: {content_hash}"""
 
             # Send Telegram notification if configured

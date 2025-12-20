@@ -20,17 +20,29 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
-# Set environment variables
-export API_HOST=${API_HOST:-0.0.0.0}
-export API_PORT=${API_PORT:-5000}
-export API_DEBUG=${API_DEBUG:-false}
+# Load production environment
+if [ -f .env.production ]; then
+    export $(cat .env.production | grep -v '^#' | xargs)
+    echo "✅ Production environment loaded from .env.production"
+else
+    echo "⚠️ .env.production not found, using defaults"
+    export API_HOST=${API_HOST:-0.0.0.0}
+    export API_PORT=${API_PORT:-5000}
+    export API_DEBUG=${API_DEBUG:-false}
 
-# Database configuration (can be overridden)
-export DB_HOST=${DB_HOST:-103.150.81.86}
-export DB_PORT=${DB_PORT:-3306}
-export DB_NAME=${DB_NAME:-xgboostqc}
-export DB_USER=${DB_USER:-xgboostqc}
-export DB_PASSWORD=${DB_PASSWORD:-6SPxBDwXH6WyxpfT}
+    # Database configuration (can be overridden)
+    export DB_HOST=${DB_HOST:-103.150.81.86}
+    export DB_PORT=${DB_PORT:-3306}
+    export DB_NAME=${DB_NAME:-xgboostqc}
+    export DB_USER=${DB_USER:-xgboostqc}
+    export DB_PASSWORD=${DB_PASSWORD:-6SPxBDwXH6WyxpfT}
+fi
+
+# Set CORS origins for production
+if [ -z "$ALLOWED_ORIGINS" ]; then
+    export ALLOWED_ORIGINS="*"
+    echo "🌐 Setting CORS to allow all origins: $ALLOWED_ORIGINS"
+fi
 
 echo "📋 Configuration:"
 echo "   API Host: ${API_HOST}"

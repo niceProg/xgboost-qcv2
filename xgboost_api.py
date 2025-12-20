@@ -39,10 +39,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS
+# Enable CORS - Load from environment
+from_env_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=from_env_origins if from_envins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

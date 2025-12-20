@@ -8,10 +8,9 @@ services:
     container_name: xgboost-api
     ports:
       - "5000:5000"
-    environment:
-      - API_HOST=0.0.0.0
-      - API_PORT=5000
-      - API_DEBUG=false
+    env_file:
+      - .env.production
+    restart: unless-stopped
       # Database configuration
       - DB_HOST=${DB_HOST:-103.150.81.86}
       - DB_PORT=${DB_PORT:-3306}
