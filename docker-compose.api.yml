@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   xgboost-api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     container_name: xgboost-api
     ports:
       - "5000:5000"
