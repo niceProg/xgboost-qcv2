@@ -206,9 +206,15 @@ async def get_latest_dataset_summary():
         ).first()
 
         if not summary_record:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No dataset summary found for session: {latest_model.session_id}"
+            # Return a response indicating no dataset summary exists
+            return DatasetSummaryResponse(
+                success=False,
+                session_id=latest_model.session_id,
+                summary_file="",
+                created_at=latest_model.created_at.isoformat(),
+                summary_data_base64=None,
+                content_type='text/plain',
+                file_extension='.txt'
             )
 
         # Try to read the actual summary file
@@ -319,10 +325,28 @@ async def get_dataset_summary_by_session(session_id: str):
         ).first()
 
         if not summary_record:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No dataset summary found for session: {session_id}"
-            )
+            # Check if the session exists in models table
+            model_record = db.query(db_storage.db_model).filter(
+                db_storage.db_model.session_id == session_id
+            ).first()
+
+            if model_record:
+                # Session exists but no dataset summary
+                return DatasetSummaryResponse(
+                    success=False,
+                    session_id=session_id,
+                    summary_file="",
+                    created_at=model_record.created_at.isoformat(),
+                    summary_data_base64=None,
+                    content_type='text/plain',
+                    file_extension='.txt'
+                )
+            else:
+                # Session doesn't exist at all
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No training session found with ID: {session_id}"
+                )
 
         # Try to read the actual summary file
         summary_base64 = None
