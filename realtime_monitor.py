@@ -808,18 +808,20 @@ Table Breakdown:
         }
 
     def run_monitor(self):
-        """Smart main monitoring loop with adaptive intervals."""
+        """24x daily monitoring loop with 1-hour restart cycle."""
         import pytz
         jakarta_tz = pytz.timezone('Asia/Jakarta')
-        logger.info("🚀 Starting Smart Real-time Database Monitor")
+        logger.info("🚀 Starting 24x Daily Real-time Database Monitor")
         logger.info(f"📊 Monitoring {len(self.tables)} tables for {self.config['focus_year']} data")
         logger.info(f"🔔 Notifications: {'Enabled' if self.config['notification']['enabled'] else 'Disabled'}")
         logger.info(f"⏰ Current time: {datetime.now(jakarta_tz)} (Business hours: {self.is_business_hours()})")
+        logger.info("🔄 Restart cycle: Every 1 hour (24x daily)")
 
         self.running = True
         cycle_count = 0
+        hour_count = 0
 
-              # Import timezone for consistency in the main loop
+        # Import timezone for consistency in the main loop
         import pytz
         jakarta_tz = pytz.timezone('Asia/Jakarta')
 
@@ -827,6 +829,7 @@ Table Breakdown:
             try:
                 cycle_count += 1
                 cycle_start = datetime.now(jakarta_tz)
+                hour_start = datetime.now(jakarta_tz)
 
                 # Log efficiency report every 10 cycles
                 if cycle_count % 10 == 0:
@@ -835,18 +838,32 @@ Table Breakdown:
                     logger.info(f"   Efficiency: {report['efficiency']} tables skipped")
                     logger.info(f"   Checked: {report['tables_checked']}/{report['total_tables']}")
                     logger.info(f"   Business Hours: {report['business_hours']}")
+                    logger.info(f"   Hour Cycle: #{hour_count + 1}/24")
 
                 # Smart check all tables
                 self.check_all_tables()
-
-                # Fixed sleep for periodic checking
-                sleep_time = 60  # Check every minute untuk update state
-                logger.debug(f"⏰ Periodic monitoring: sleeping {sleep_time}s")
 
                 # Calculate cycle time
                 cycle_time = (datetime.now(jakarta_tz) - cycle_start).total_seconds()
                 if cycle_time > 10:  # Warn if cycle takes too long
                     logger.warning(f"⚠️ Long monitoring cycle: {cycle_time:.1f}s")
+
+                # 1-hour restart cycle logic
+                current_time = datetime.now(jakarta_tz)
+                hour_elapsed = (current_time - hour_start).total_seconds()
+
+                if hour_elapsed >= 3600:  # 1 hour = 3600 seconds
+                    hour_count += 1
+                    logger.info(f"🔄 Hourly restart #{hour_count}/24 completed")
+                    logger.info("⏰ Restarting monitoring cycle for fresh state")
+
+                    # Short break before next hour cycle
+                    time.sleep(5)  # 5-second break
+                    continue
+
+                # Fixed sleep for periodic checking (check every 5 minutes for new data)
+                sleep_time = 300  # 5 minutes = 300 seconds
+                logger.debug(f"⏰ Periodic monitoring: checking every {sleep_time}s (5 minutes)")
 
                 time.sleep(sleep_time)
 
@@ -858,7 +875,7 @@ Table Breakdown:
                 time.sleep(60)  # Wait 1 minute before retry
 
         self.running = False
-        logger.info("🛑 Smart real-time monitor stopped")
+        logger.info("🛑 24x Daily real-time monitor stopped")
 
     def stop(self):
         """Stop the monitor."""

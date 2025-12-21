@@ -40,10 +40,7 @@ check_prerequisites() {
         exit 1
     fi
 
-    if [ ! -f "notification_manager.py" ]; then
-        print_error "notification_manager.py not found"
-        exit 1
-    fi
+    # notification_manager.py is no longer required - self-contained in realtime_monitor.py
 
     print_success "All required files found"
 }
@@ -139,7 +136,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from notification_manager import ModelUpdateNotifier
+# Notifications now handled by realtime_monitor.py directly
 from realtime_trainer_pipeline import RealtimeTrainerPipeline
 
 # Setup logging
@@ -226,7 +223,7 @@ test_telegram() {
     print_info "Testing Telegram connection..."
 
     python3 -c "
-from notification_manager import ModelUpdateNotifier
+# Notifications now handled by realtime_monitor.py directly
 import os
 
 try:
