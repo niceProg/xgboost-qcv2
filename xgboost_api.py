@@ -189,29 +189,49 @@ async def get_latest_dataset_summary():
         # Get latest dataset summary from database
         db = db_storage.get_session()
 
-        # Get latest session from xgboost_models first
-        latest_model = db.query(db_storage.db_model).filter(
-            db_storage.db_model.is_latest == True
-        ).order_by(db_storage.db_model.created_at.desc()).first()
-
-        if not latest_model:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No trained models found"
-            )
-
-        # Get corresponding dataset summary
-        summary_record = db.query(db_storage.db_dataset_summary).filter(
-            db_storage.db_dataset_summary.session_id == latest_model.session_id
+        # Get the latest dataset summary record directly
+        summary_record = db.query(db_storage.db_dataset_summary).order_by(
+            db_storage.db_dataset_summary.created_at.desc()
         ).first()
 
         if not summary_record:
-            # Return a response indicating no dataset summary exists
+            # If no dataset summary in database, try to find the latest file in the directory
+            summary_dir = Path("./output_train/datasets/summary")
+            if summary_dir.exists():
+                # Get all .txt files and sort by modification time
+                summary_files = list(summary_dir.glob("dataset_summary_*.txt"))
+                if summary_files:
+                    # Get the latest file
+                    latest_file = max(summary_files, key=lambda f: f.stat().st_mtime)
+                    session_id = latest_file.stem.replace("dataset_summary_", "")
+
+                    # Read the file
+                    summary_base64 = read_file_as_base64(str(latest_file))
+
+                    # Get file stats
+                    file_stats = latest_file.stat()
+                    created_at = datetime.fromtimestamp(file_stats.st_mtime).isoformat()
+
+                    response = DatasetSummaryResponse(
+                        success=True,
+                        session_id=session_id,
+                        summary_file=latest_file.name,
+                        created_at=created_at,
+                        summary_data_base64=summary_base64,
+                        content_type='text/plain',
+                        file_extension='.txt'
+                    )
+
+                    db.close()
+                    logger.info(f"✅ Retrieved latest dataset summary from file: {latest_file.name}")
+                    return response
+
+            # No dataset summary found in database or directory
             return DatasetSummaryResponse(
                 success=False,
-                session_id=latest_model.session_id,
+                session_id="",
                 summary_file="",
-                created_at=latest_model.created_at.isoformat(),
+                created_at=datetime.utcnow().isoformat(),
                 summary_data_base64=None,
                 content_type='text/plain',
                 file_extension='.txt'
@@ -325,6 +345,32 @@ async def get_dataset_summary_by_session(session_id: str):
         ).first()
 
         if not summary_record:
+            # Try to find the file directly in the directory
+            summary_file_name = f"dataset_summary_{session_id}.txt"
+            summary_file_path = f"./output_train/datasets/summary/{summary_file_name}"
+
+            if os.path.exists(summary_file_path):
+                # Read the file
+                summary_base64 = read_file_as_base64(summary_file_path)
+
+                # Get file stats
+                file_stats = os.stat(summary_file_path)
+                created_at = datetime.fromtimestamp(file_stats.st_mtime).isoformat()
+
+                response = DatasetSummaryResponse(
+                    success=True,
+                    session_id=session_id,
+                    summary_file=summary_file_name,
+                    created_at=created_at,
+                    summary_data_base64=summary_base64,
+                    content_type='text/plain',
+                    file_extension='.txt'
+                )
+
+                db.close()
+                logger.info(f"✅ Retrieved dataset summary from file for session: {session_id}")
+                return response
+
             # Check if the session exists in models table
             model_record = db.query(db_storage.db_model).filter(
                 db_storage.db_model.session_id == session_id
