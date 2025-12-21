@@ -141,7 +141,7 @@ test_service() {
     # Test database connection
     echo ""
     print_status $BLUE "🔍 Testing database connection..."
-    source .xgboost-qc/bin/activate
+    source .venv-xgboost/bin/activate
     python3 -c "
 import os
 from dotenv import load_dotenv
