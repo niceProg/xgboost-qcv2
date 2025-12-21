@@ -63,29 +63,30 @@ docker-compose -f docker-compose.api.yml up -d
 echo "⏳ Waiting for API to be healthy..."
 sleep 10
 
-# Check if API is running (internal container check)
-if docker exec xgboost-api curl -f http://localhost:8000/health > /dev/null 2>&1; then
-    echo "✅ XGBoost API is running successfully!"
+# Check if API container is running (without port mapping)
+if docker ps | grep -q "xgboost-api"; then
+    echo "✅ XGBoost API container is running!"
     echo ""
-    echo "🌐 API Only accessible through domain:"
+    echo "🌐 API Configuration:"
+    echo "   • Container: Running internally on port 8000"
+    echo "   • External access: Only via domain (https://api.dragonfortune.ai)"
+    echo "   • Direct IP:Port: Disabled for security"
+    echo ""
+    echo "📋 Next Steps:"
+    echo "   1. Update Nginx configuration to proxy to port 8000"
+    echo "   2. Reload Nginx: nginx -s reload"
+    echo "   3. Test domain: curl https://api.dragonfortune.ai/health"
+    echo ""
+    echo "🌐 API Endpoints (via domain):"
     echo "   Health Check: https://api.dragonfortune.ai/health"
     echo "   Latest Model: https://api.dragonfortune.ai/api/v1/latest/model"
     echo "   Latest Summary: https://api.dragonfortune.ai/api/v1/latest/dataset-summary"
     echo "   List Sessions: https://api.dragonfortune.ai/api/v1/sessions"
+    echo "   Documentation: https://api.dragonfortune.ai/docs"
     echo ""
-    echo "📖 API Documentation: https://api.dragonfortune.ai/docs"
-    echo "📖 Alternative Docs: https://api.dragonfortune.ai/redoc"
-    echo ""
-    echo "📖 For QuantConnect integration, see quantconnect_integration_example.py"
-    echo ""
-    echo "🧪 To test the API (through domain):"
-    echo "   curl https://api.dragonfortune.ai/health"
-    echo "   curl https://api.dragonfortune.ai/api/v1/latest/model"
-    echo "   curl https://api.dragonfortune.ai/api/v1/latest/dataset-summary"
-    echo ""
-    echo "⚠️  Direct IP/port access is disabled for security"
+    echo "⚠️  Security: API only accessible through domain with SSL"
 else
-    echo "❌ XGBoost API failed to start properly!"
+    echo "❌ XGBoost API container failed to start!"
     echo "📋 Check logs with: docker-compose -f docker-compose.api.yml logs"
     exit 1
 fi

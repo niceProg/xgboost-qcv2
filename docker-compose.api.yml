@@ -4,9 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: xgboost-api
-    # No external port mapping - only accessible through Nginx reverse proxy
-    # ports:
-    #   - "8000:8000"
+    # Enable port mapping for IP:Port access (will be redirected to domain)
+    ports:
+      - "8000:8000"
     env_file:
       - .env.production
     environment:
