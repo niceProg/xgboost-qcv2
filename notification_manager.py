@@ -107,31 +107,6 @@ class ModelUpdateNotifier:
         logger.info("🚀 Model ready notification sent")
         print(message)
 
-    def send_telegram_message(self, message: str):
-        """Send custom message to Telegram."""
-        if self.telegram_token and self.telegram_chat_id:
-            try:
-                response = requests.post(
-                    f"https://api.telegram.org/bot{self.telegram_token}/sendMessage",
-                    json={
-                        'chat_id': self.telegram_chat_id,
-                        'text': message,
-                        'parse_mode': 'Markdown'
-                    }
-                )
-                if response.status_code == 200:
-                    logger.info("✅ Telegram message sent")
-                    return True
-                else:
-                    logger.error(f"❌ Telegram failed: {response.status_code}")
-                    return False
-            except Exception as e:
-                logger.error(f"❌ Telegram error: {e}")
-                return False
-        else:
-            logger.warning("❌ Telegram not configured")
-            return False
-
     def send_upload_reminder(self):
         """Send reminder jika model belum di-upload."""
 
