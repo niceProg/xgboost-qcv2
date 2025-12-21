@@ -6,7 +6,7 @@ services:
     container_name: xgboost-api
     # Enable port mapping for IP:Port access (will be redirected to domain)
     ports:
-      - "8000:8000"
+      - "9000:8000"
     env_file:
       - .env.production
     environment:
