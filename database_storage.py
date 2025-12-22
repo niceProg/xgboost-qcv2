@@ -162,12 +162,11 @@ class DatabaseStorage:
             # Serialize model
             model_data = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
 
-            # If this is latest, unset previous latest
+            # If this is latest, unset ALL previous latest records globally
             if is_latest:
                 db.query(ModelStorage).filter(
-                    ModelStorage.session_id == self.session_id,
                     ModelStorage.is_latest == True
-                ).update({'is_latest': False})
+                ).update({'is_latest': False}, synchronize_session=False)
 
             # Store model dengan hanya 8 kolom yang client izinkan
             model_storage = ModelStorage(

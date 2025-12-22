@@ -102,6 +102,22 @@ class ErrorResponse(BaseModel):
     error: str
     message: str
 
+class ModelInsertRequest(BaseModel):
+    model_name: str
+    model_data_base64: str
+    is_latest: bool = True
+    feature_names: Optional[List[str]] = []
+    hyperparams: Optional[Dict] = {}
+    train_score: Optional[float] = None
+    val_score: Optional[float] = None
+    cv_scores: Optional[List[float]] = None
+
+class ModelInsertResponse(BaseModel):
+    success: bool
+    message: str
+    session_id: str
+    model_id: Optional[int] = None
+
 def encode_to_base64(data: bytes) -> str:
     """Encode bytes to base64 string."""
     return base64.b64encode(data).decode('utf-8')
@@ -482,6 +498,63 @@ async def list_sessions():
             detail=f"Failed to retrieve sessions: {str(e)}"
         )
 
+@app.post("/api/v1/model", response_model=ModelInsertResponse)
+async def insert_model(model_request: ModelInsertRequest):
+    """Insert a new trained model to the database."""
+
+    if not db_storage:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not connected"
+        )
+
+    try:
+        # Decode base64 model data
+        model_bytes = base64.b64decode(model_request.model_data_base64)
+        model = pickle.loads(model_bytes)
+
+        # Generate new session_id for this model
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        db_storage.session_id = session_id
+
+        # Store the model using the store_model method
+        # The method will automatically handle is_latest flag - setting all previous latest to False
+        returned_session_id = db_storage.store_model(
+            model=model,
+            model_name=model_request.model_name,
+            feature_names=model_request.feature_names,
+            hyperparams=model_request.hyperparams,
+            train_score=model_request.train_score,
+            val_score=model_request.val_score,
+            cv_scores=model_request.cv_scores,
+            is_latest=model_request.is_latest
+        )
+
+        # Get the inserted model record ID
+        db = db_storage.get_session()
+        model_record = db.query(db_storage.db_model).filter(
+            db_storage.db_model.session_id == returned_session_id
+        ).first()
+        model_id = model_record.id if model_record else None
+
+        db.close()
+
+        logger.info(f"✅ Successfully inserted model: {model_request.model_name} (Session: {returned_session_id})")
+
+        return ModelInsertResponse(
+            success=True,
+            message="Model inserted successfully",
+            session_id=returned_session_id,
+            model_id=model_id
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Failed to insert model: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to insert model: {str(e)}"
+        )
+
 # Database model references (to avoid circular imports)
 def init_db_models():
     """Initialize database model references."""
@@ -507,6 +580,7 @@ if __name__ == "__main__":
     logger.info("   GET /api/v1/model/<session_id> - Get model by session")
     logger.info("   GET /api/v1/dataset-summary/<session_id> - Get dataset summary by session")
     logger.info("   GET /api/v1/sessions - List all sessions")
+    logger.info("   POST /api/v1/model - Insert new model (with is_latest handling)")
     logger.info("📖 API docs available at: http://localhost:5000/docs")
 
     uvicorn.run(app, host=host, port=port)
