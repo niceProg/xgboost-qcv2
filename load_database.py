@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 """
-Load data from 6 trading tables with filtering capabilities.
+Load data from 9 trading tables with filtering capabilities.
 Extracts data based on exchange, pair, interval, time, and days parameters.
-Enhanced with taker volume data for improved prediction accuracy.
+
+Core Training Tables (5):
+- cg_futures_price_history
+- cg_futures_aggregated_taker_buy_sell_volume_history
+- cg_futures_aggregated_ask_bids_history
+- cg_open_interest_aggregated_history
+- cg_liquidation_aggregated_history
+
+Support/Regime Filter Tables (4):
+- cg_funding_rate_history
+- cg_futures_basis_history
+- cg_long_short_global_account_ratio_history
+- cg_long_short_top_account_ratio_history
 """
 
 import pandas as pd
@@ -34,7 +46,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class DatabaseLoader:
-    """Load data from database tables with filtering capabilities (enhanced with taker volume)."""
+    """Load data from 9 database tables with filtering capabilities (5 core + 4 support/regime filter)."""
 
     def __init__(self, data_filter: DataFilter, output_dir: str = './output_train',
                  enable_db_storage: bool = True):
@@ -58,15 +70,46 @@ class DatabaseLoader:
             'password': os.getenv('TRADING_DB_PASSWORD')
         }
 
-        # Define table schemas (6 tables with taker volume added)
+        # Define table schemas (9 tables: 5 core + 4 support/regime filter)
         self.tables = {
-            'cg_spot_price_history': {
+            # ===== CORE TRAINING TABLES =====
+            'cg_futures_price_history': {
                 'time_col': 'time',
                 'exchange_col': 'exchange',
                 'pair_col': 'symbol',
                 'key_columns': ['time', 'exchange', 'symbol', 'interval'],
                 'data_columns': ['open', 'high', 'low', 'close', 'volume_usd']
             },
+            'cg_futures_aggregated_taker_buy_sell_volume_history': {
+                'time_col': 'time',
+                'exchange_col': 'exchange_list',
+                'pair_col': 'symbol',
+                'key_columns': ['time', 'exchange_list', 'symbol', 'interval'],
+                'data_columns': ['aggregated_buy_volume', 'aggregated_sell_volume']
+            },
+            'cg_futures_aggregated_ask_bids_history': {
+                'time_col': 'time',
+                'exchange_col': 'exchange_list',
+                'pair_col': 'symbol',
+                'key_columns': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent'],
+                'data_columns': ['aggregated_bids_usd', 'aggregated_bids_quantity',
+                               'aggregated_asks_usd', 'aggregated_asks_quantity']
+            },
+            'cg_open_interest_aggregated_history': {
+                'time_col': 'time',
+                'exchange_col': None,
+                'pair_col': 'symbol',
+                'key_columns': ['time', 'symbol', 'interval'],
+                'data_columns': ['open', 'high', 'low', 'close']
+            },
+            'cg_liquidation_aggregated_history': {
+                'time_col': 'time',
+                'exchange_col': None,
+                'pair_col': 'symbol',
+                'key_columns': ['time', 'symbol', 'interval'],
+                'data_columns': ['aggregated_long_liquidation_usd', 'aggregated_short_liquidation_usd']
+            },
+            # ===== SUPPORT / REGIME FILTER TABLES =====
             'cg_funding_rate_history': {
                 'time_col': 'time',
                 'exchange_col': 'exchange',
@@ -80,13 +123,6 @@ class DatabaseLoader:
                 'pair_col': 'pair',
                 'key_columns': ['time', 'exchange', 'pair', 'interval'],
                 'data_columns': ['open_basis', 'close_basis', 'open_change', 'close_change']
-            },
-            'cg_spot_aggregated_taker_volume_history': {
-                'time_col': 'time',
-                'exchange_col': 'exchange_name',
-                'pair_col': 'symbol',
-                'key_columns': ['time', 'exchange_name', 'symbol', 'interval'],
-                'data_columns': ['aggregated_buy_volume_usd', 'aggregated_sell_volume_usd']
             },
             'cg_long_short_global_account_ratio_history': {
                 'time_col': 'time',
@@ -152,7 +188,7 @@ class DatabaseLoader:
             return pd.DataFrame()
 
     def load_all_tables(self) -> Dict[str, pd.DataFrame]:
-        """Load data from all 5 tables."""
+        """Load data from all 9 tables (5 core + 4 support/regime filter)."""
         all_data = {}
 
         for table_name in self.tables.keys():
@@ -202,7 +238,13 @@ class DatabaseLoader:
 
         # Expected CSV filenames
         csv_files = {
-            'cg_spot_price_history': 'spot_price_history.csv',
+            # Core training tables
+            'cg_futures_price_history': 'futures_price_history.csv',
+            'cg_futures_aggregated_taker_buy_sell_volume_history': 'futures_taker_volume.csv',
+            'cg_futures_aggregated_ask_bids_history': 'futures_ask_bids.csv',
+            'cg_open_interest_aggregated_history': 'open_interest.csv',
+            'cg_liquidation_aggregated_history': 'liquidation.csv',
+            # Support/regime filter tables
             'cg_funding_rate_history': 'funding_rate_history.csv',
             'cg_futures_basis_history': 'futures_basis_history.csv',
             'cg_long_short_global_account_ratio_history': 'ls_global_ratio_history.csv',
@@ -247,8 +289,8 @@ class DatabaseLoader:
                 if end_time:
                     filtered_df = filtered_df[filtered_df[table_info['time_col']] <= end_time]
 
-        # Exchange filter
-        if self.data_filter.exchange_filter:
+        # Exchange filter (skip if table doesn't have exchange column)
+        if self.data_filter.exchange_filter and table_info['exchange_col'] is not None:
             exchange_col = table_info['exchange_col']
             filtered_df = filtered_df[filtered_df[exchange_col].isin(self.data_filter.exchange_filter)]
 

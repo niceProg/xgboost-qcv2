@@ -506,7 +506,7 @@ async def trigger_training(background_tasks: BackgroundTasks):
         "timestamp": datetime.now().isoformat(),
         "trigger_reason": "api_manual_trigger",
         "triggered_by": "api_user",
-        "tables_with_new_data": ["cg_spot_price_history"]
+        "tables_with_new_data": ["cg_futures_price_history"]
     }
 
     try:

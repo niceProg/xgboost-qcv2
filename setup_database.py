@@ -34,14 +34,40 @@ class DatabaseSetup:
             'charset': 'utf8mb4'
         }
 
-        # Tables to setup
+        # Tables to setup (FUTURES-ONLY)
         self.tables = [
+            # ===== CORE TRAINING TABLES =====
             {
-                'name': 'cg_spot_price_history',
+                'name': 'cg_futures_price_history',
                 'time_col': 'time',
                 'symbol_col': 'symbol',
                 'key_cols': ['time', 'exchange', 'symbol', 'interval']
             },
+            {
+                'name': 'cg_futures_aggregated_taker_buy_sell_volume_history',
+                'time_col': 'time',
+                'symbol_col': 'symbol',
+                'key_cols': ['time', 'exchange_list', 'symbol', 'interval']
+            },
+            {
+                'name': 'cg_futures_aggregated_ask_bids_history',
+                'time_col': 'time',
+                'symbol_col': 'symbol',
+                'key_cols': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent']
+            },
+            {
+                'name': 'cg_open_interest_aggregated_history',
+                'time_col': 'time',
+                'symbol_col': 'symbol',
+                'key_cols': ['time', 'symbol', 'interval']
+            },
+            {
+                'name': 'cg_liquidation_aggregated_history',
+                'time_col': 'time',
+                'symbol_col': 'symbol',
+                'key_cols': ['time', 'symbol', 'interval']
+            },
+            # ===== SUPPORT / REGIME FILTER TABLES =====
             {
                 'name': 'cg_funding_rate_history',
                 'time_col': 'time',
@@ -53,12 +79,6 @@ class DatabaseSetup:
                 'time_col': 'time',
                 'symbol_col': 'pair',
                 'key_cols': ['time', 'exchange', 'pair', 'interval']
-            },
-            {
-                'name': 'cg_spot_aggregated_taker_volume_history',
-                'time_col': 'time',
-                'symbol_col': 'symbol',
-                'key_cols': ['time', 'exchange_name', 'symbol', 'interval']
             },
             {
                 'name': 'cg_long_short_global_account_ratio_history',

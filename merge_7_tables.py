@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 """
-Merge 6 trading tables into a unified DataFrame.
+Merge 9 trading tables into a unified DataFrame (FUTURES-ONLY).
 Handles time alignment, missing data, and prepares data for feature engineering.
-Enhanced with taker volume data for improved prediction accuracy.
+
+Core Training Tables (5):
+- cg_futures_price_history
+- cg_futures_aggregated_taker_buy_sell_volume_history
+- cg_futures_aggregated_ask_bids_history
+- cg_open_interest_aggregated_history
+- cg_liquidation_aggregated_history
+
+Support/Regime Filter Tables (4):
+- cg_funding_rate_history
+- cg_futures_basis_history
+- cg_long_short_global_account_ratio_history
+- cg_long_short_top_account_ratio_history
 """
 
 import pandas as pd
@@ -26,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class TableMerger:
-    """Merge 6 trading tables into a unified dataset."""
+    """Merge 9 trading tables into a unified dataset (FUTURES-ONLY)."""
 
     def __init__(self, data_filter: DataFilter, output_dir: str = './output_train'):
         self.data_filter = data_filter
@@ -34,14 +46,41 @@ class TableMerger:
         self.merged_data = None
 
         # Define table priority and merge strategies
-        self.base_table = 'cg_spot_price_history'  # Primary table for time base
+        self.base_table = 'cg_futures_price_history'  # Primary table for time base
         self.tables_info = {
-            'cg_spot_price_history': {
+            # ===== CORE TRAINING TABLES =====
+            'cg_futures_price_history': {
                 'prefix': 'price',
                 'key_cols': ['time', 'exchange', 'symbol', 'interval'],
                 'data_cols': ['open', 'high', 'low', 'close', 'volume_usd'],
                 'required': True
             },
+            'cg_futures_aggregated_taker_buy_sell_volume_history': {
+                'prefix': 'taker',
+                'key_cols': ['time', 'exchange_list', 'symbol', 'interval'],
+                'data_cols': ['aggregated_buy_volume', 'aggregated_sell_volume'],
+                'required': False
+            },
+            'cg_futures_aggregated_ask_bids_history': {
+                'prefix': 'orderbook',
+                'key_cols': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent'],
+                'data_cols': ['aggregated_bids_usd', 'aggregated_bids_quantity',
+                             'aggregated_asks_usd', 'aggregated_asks_quantity'],
+                'required': False
+            },
+            'cg_open_interest_aggregated_history': {
+                'prefix': 'oi',
+                'key_cols': ['time', 'symbol', 'interval'],
+                'data_cols': ['open', 'high', 'low', 'close'],
+                'required': False
+            },
+            'cg_liquidation_aggregated_history': {
+                'prefix': 'liq',
+                'key_cols': ['time', 'symbol', 'interval'],
+                'data_cols': ['aggregated_long_liquidation_usd', 'aggregated_short_liquidation_usd'],
+                'required': False
+            },
+            # ===== SUPPORT / REGIME FILTER TABLES =====
             'cg_funding_rate_history': {
                 'prefix': 'funding',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
@@ -52,12 +91,6 @@ class TableMerger:
                 'prefix': 'basis',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
                 'data_cols': ['open_basis', 'close_basis', 'open_change', 'close_change'],
-                'required': False
-            },
-            'cg_spot_aggregated_taker_volume_history': {
-                'prefix': 'taker',
-                'key_cols': ['time', 'exchange_name', 'symbol', 'interval'],
-                'data_cols': ['aggregated_buy_volume_usd', 'aggregated_sell_volume_usd'],
                 'required': False
             },
             'cg_long_short_global_account_ratio_history': {
@@ -129,10 +162,13 @@ class TableMerger:
         # Create standardized key columns
         key_mapping = {}
         for col in info['key_cols']:
-            if col == 'exchange_name':
+            if col == 'exchange_name' or col == 'exchange_list':
                 key_mapping[col] = 'exchange'
             elif col == 'pair':
                 key_mapping[col] = 'symbol'
+            elif col == 'range_percent':
+                # Keep range_percent as is (it's an additional key for orderbook)
+                continue
             else:
                 key_mapping[col] = col
 
@@ -182,11 +218,18 @@ class TableMerger:
         table_std = self.standardize_column_names(table_df, table_name)
         table_std['time'] = pd.to_datetime(table_std['time'], unit='ms')
 
-        # Remove duplicates
-        table_std = table_std.drop_duplicates(subset=['time', 'exchange', 'symbol', 'interval'], keep='last')
+        # Tables without exchange column (aggregated tables)
+        no_exchange_tables = ['cg_open_interest_aggregated_history', 'cg_liquidation_aggregated_history']
 
-        # Define merge keys
-        merge_keys = ['time', 'exchange', 'symbol', 'interval']
+        # Remove duplicates and define merge keys based on table type
+        if table_name in no_exchange_tables:
+            # These tables only have time + symbol + interval
+            table_std = table_std.drop_duplicates(subset=['time', 'symbol', 'interval'], keep='last')
+            merge_keys = ['time', 'symbol', 'interval']
+        else:
+            # Tables with exchange column
+            table_std = table_std.drop_duplicates(subset=['time', 'exchange', 'symbol', 'interval'], keep='last')
+            merge_keys = ['time', 'exchange', 'symbol', 'interval']
 
         # Merge with outer join to keep all timestamps
         merged = pd.merge(
@@ -313,12 +356,12 @@ class TableMerger:
         features_dir.mkdir(exist_ok=True)
 
         # Save as parquet to datasets directory
-        output_file = datasets_dir / 'merged_7_tables.parquet'
+        output_file = datasets_dir / 'merged_9_tables.parquet'
         df.to_parquet(output_file, index=False)
         logger.info(f"Merged data saved to {output_file}")
 
         # Also save as CSV to datasets directory for easy inspection
-        csv_file = datasets_dir / 'merged_7_tables.csv'
+        csv_file = datasets_dir / 'merged_9_tables.csv'
         df.to_csv(csv_file, index=False)
         logger.info(f"Merged data saved to {csv_file}")
 

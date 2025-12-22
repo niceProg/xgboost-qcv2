@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 """
-Feature engineering for 7 trading tables based on semantic nature of each dataset.
+Feature engineering for 9 futures trading tables based on semantic nature of each dataset.
 Implements the specifications from feature_engineering.md for optimal XGBoost features.
-Enhanced with taker volume features from spot markets for improved prediction accuracy.
+
+Core Training Tables (5):
+- cg_futures_price_history (OHLCV)
+- cg_futures_aggregated_taker_buy_sell_volume_history
+- cg_futures_aggregated_ask_bids_history
+- cg_open_interest_aggregated_history
+- cg_liquidation_aggregated_history
+
+Support/Regime Filter Tables (4):
+- cg_funding_rate_history
+- cg_futures_basis_history
+- cg_long_short_global_account_ratio_history
+- cg_long_short_top_account_ratio_history
 """
 
 import pandas as pd
@@ -26,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class FeatureEngineer:
-    """Implement feature engineering based on table semantics (futures + selected spot data)."""
+    """Implement feature engineering for futures-only trading data (9 tables)."""
 
     def __init__(self, data_filter: DataFilter, output_dir: str = './output_train'):
         self.data_filter = data_filter
@@ -39,15 +51,15 @@ class FeatureEngineer:
 
         # Try datasets directory first (new structure), then root (compatibility)
         datasets_dir = self.output_dir / 'datasets'
-        merged_file = datasets_dir / 'merged_7_tables.parquet'
+        merged_file = datasets_dir / 'merged_9_tables.parquet'
 
         if not merged_file.exists():
             # Fallback to root directory for backward compatibility
-            merged_file = self.output_dir / 'merged_7_tables.parquet'
+            merged_file = self.output_dir / 'merged_9_tables.parquet'
 
         if not merged_file.exists():
             logger.error(f"Merged data file not found: {merged_file}")
-            logger.error(f"Checked: {datasets_dir / 'merged_7_tables.parquet'} and {self.output_dir / 'merged_7_tables.parquet'}")
+            logger.error(f"Checked: {datasets_dir / 'merged_9_tables.parquet'} and {self.output_dir / 'merged_9_tables.parquet'}")
             sys.exit(1)
 
         try:
@@ -59,7 +71,7 @@ class FeatureEngineer:
             sys.exit(1)
 
     def add_price_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add features for cg_spot_price_history (OHLCV)."""
+        """Add features for cg_futures_price_history (OHLCV)."""
         logger.info("Adding price features...")
 
         # Helper function for groupby rolling with proper index alignment
@@ -157,27 +169,27 @@ class FeatureEngineer:
         return df
 
     def add_taker_volume_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add features for cg_spot_aggregated_taker_volume_history."""
+        """Add features for cg_futures_aggregated_taker_buy_sell_volume_history."""
         logger.info("Adding taker volume features...")
 
-        if 'taker_aggregated_buy_volume_usd' not in df.columns:
+        if 'taker_aggregated_buy_volume' not in df.columns:
             logger.warning("Taker volume data not available")
             return df
 
         # Taker imbalance metrics
-        total_volume = df['taker_aggregated_buy_volume_usd'] + df['taker_aggregated_sell_volume_usd']
-        df['taker_buy_ratio'] = df['taker_aggregated_buy_volume_usd'] / total_volume
-        df['taker_imbalance'] = df['taker_aggregated_buy_volume_usd'] - df['taker_aggregated_sell_volume_usd']
+        total_volume = df['taker_aggregated_buy_volume'] + df['taker_aggregated_sell_volume']
+        df['taker_buy_ratio'] = df['taker_aggregated_buy_volume'] / total_volume
+        df['taker_imbalance'] = df['taker_aggregated_buy_volume'] - df['taker_aggregated_sell_volume']
 
         # Rolling statistics using transform to maintain index compatibility
-        df['taker_buy_mean_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_buy_volume_usd'].transform(lambda x: x.rolling(12).mean())
-        df['taker_sell_mean_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_sell_volume_usd'].transform(lambda x: x.rolling(12).mean())
-        df['taker_buy_std_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_buy_volume_usd'].transform(lambda x: x.rolling(12).std())
-        df['taker_sell_std_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_sell_volume_usd'].transform(lambda x: x.rolling(12).std())
+        df['taker_buy_mean_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_buy_volume'].transform(lambda x: x.rolling(12).mean())
+        df['taker_sell_mean_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_sell_volume'].transform(lambda x: x.rolling(12).mean())
+        df['taker_buy_std_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_buy_volume'].transform(lambda x: x.rolling(12).std())
+        df['taker_sell_std_12'] = df.groupby(['exchange', 'symbol', 'interval'])['taker_aggregated_sell_volume'].transform(lambda x: x.rolling(12).std())
 
         # Z-scores
-        df['taker_buy_zscore'] = (df['taker_aggregated_buy_volume_usd'] - df['taker_buy_mean_12']) / df['taker_buy_std_12']
-        df['taker_sell_zscore'] = (df['taker_aggregated_sell_volume_usd'] - df['taker_sell_mean_12']) / df['taker_sell_std_12']
+        df['taker_buy_zscore'] = (df['taker_aggregated_buy_volume'] - df['taker_buy_mean_12']) / df['taker_buy_std_12']
+        df['taker_sell_zscore'] = (df['taker_aggregated_sell_volume'] - df['taker_sell_mean_12']) / df['taker_sell_std_12']
 
         self.feature_columns.extend([
             'taker_buy_ratio', 'taker_imbalance', 'taker_buy_mean_12',
@@ -186,10 +198,102 @@ class FeatureEngineer:
 
         return df
 
-    # Removed: orderbook features (cg_spot_aggregated_ask_bids_history is spot data)
     def add_orderbook_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Placeholder - orderbook features removed (spot data)."""
-        logger.info("Skipping orderbook features (spot data not used)")
+        """Add features for cg_futures_aggregated_ask_bids_history."""
+        logger.info("Adding orderbook features...")
+
+        if 'orderbook_aggregated_bids_usd' not in df.columns:
+            logger.warning("Orderbook data not available")
+            return df
+
+        # Orderbook imbalance
+        total_usd = df['orderbook_aggregated_bids_usd'] + df['orderbook_aggregated_asks_usd']
+        df['orderbook_bid_ask_ratio'] = df['orderbook_aggregated_bids_usd'] / df['orderbook_aggregated_asks_usd']
+        df['orderbook_imbalance_usd'] = df['orderbook_aggregated_bids_usd'] - df['orderbook_aggregated_asks_usd']
+
+        # Quantity-based imbalance
+        total_qty = df['orderbook_aggregated_bids_quantity'] + df['orderbook_aggregated_asks_quantity']
+        df['orderbook_bid_ask_ratio_qty'] = df['orderbook_aggregated_bids_quantity'] / df['orderbook_aggregated_asks_quantity']
+        df['orderbook_imbalance_qty'] = df['orderbook_aggregated_bids_quantity'] - df['orderbook_aggregated_asks_quantity']
+
+        # Rolling statistics
+        df['orderbook_bid_mean_12'] = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_bids_usd'].transform(lambda x: x.rolling(12).mean())
+        df['orderbook_ask_mean_12'] = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_asks_usd'].transform(lambda x: x.rolling(12).mean())
+
+        # Z-scores
+        bid_std = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_bids_usd'].transform(lambda x: x.rolling(12).std())
+        ask_std = df.groupby(['exchange', 'symbol', 'interval'])['orderbook_aggregated_asks_usd'].transform(lambda x: x.rolling(12).std())
+        df['orderbook_bid_zscore'] = (df['orderbook_aggregated_bids_usd'] - df['orderbook_bid_mean_12']) / bid_std
+        df['orderbook_ask_zscore'] = (df['orderbook_aggregated_asks_usd'] - df['orderbook_ask_mean_12']) / ask_std
+
+        self.feature_columns.extend([
+            'orderbook_bid_ask_ratio', 'orderbook_imbalance_usd',
+            'orderbook_bid_ask_ratio_qty', 'orderbook_imbalance_qty',
+            'orderbook_bid_mean_12', 'orderbook_ask_mean_12',
+            'orderbook_bid_zscore', 'orderbook_ask_zscore'
+        ])
+
+        return df
+
+    def add_open_interest_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add features for cg_open_interest_aggregated_history."""
+        logger.info("Adding open interest features...")
+
+        if 'oi_close' not in df.columns:
+            logger.warning("Open interest data not available")
+            return df
+
+        # OI changes
+        df['oi_delta'] = df.groupby(['symbol', 'interval'])['oi_close'].diff()
+        df['oi_pct_change'] = df.groupby(['symbol', 'interval'])['oi_close'].pct_change()
+
+        # Rolling statistics
+        df['oi_mean_24'] = df.groupby(['symbol', 'interval'])['oi_close'].transform(lambda x: x.rolling(24).mean())
+        oi_std_24 = df.groupby(['symbol', 'interval'])['oi_close'].transform(lambda x: x.rolling(24).std())
+        df['oi_zscore'] = (df['oi_close'] - df['oi_mean_24']) / oi_std_24
+
+        # OI range features
+        df['oi_range'] = df['oi_high'] - df['oi_low']
+        df['oi_range_pct'] = (df['oi_high'] - df['oi_low']) / df['oi_close']
+
+        self.feature_columns.extend([
+            'oi_delta', 'oi_pct_change', 'oi_mean_24', 'oi_zscore', 'oi_range', 'oi_range_pct'
+        ])
+
+        return df
+
+    def add_liquidation_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add features for cg_liquidation_aggregated_history."""
+        logger.info("Adding liquidation features...")
+
+        if 'liq_aggregated_long_liquidation_usd' not in df.columns:
+            logger.warning("Liquidation data not available")
+            return df
+
+        # Liquidation imbalance
+        total_liq = df['liq_aggregated_long_liquidation_usd'] + df['liq_aggregated_short_liquidation_usd']
+        df['liq_long_ratio'] = df['liq_aggregated_long_liquidation_usd'] / total_liq
+        df['liq_imbalance'] = df['liq_aggregated_long_liquidation_usd'] - df['liq_aggregated_short_liquidation_usd']
+
+        # Rolling statistics
+        df['liq_long_mean_12'] = df.groupby(['symbol', 'interval'])['liq_aggregated_long_liquidation_usd'].transform(lambda x: x.rolling(12).mean())
+        df['liq_short_mean_12'] = df.groupby(['symbol', 'interval'])['liq_aggregated_short_liquidation_usd'].transform(lambda x: x.rolling(12).mean())
+
+        # Z-scores
+        long_std = df.groupby(['symbol', 'interval'])['liq_aggregated_long_liquidation_usd'].transform(lambda x: x.rolling(12).std())
+        short_std = df.groupby(['symbol', 'interval'])['liq_aggregated_short_liquidation_usd'].transform(lambda x: x.rolling(12).std())
+        df['liq_long_zscore'] = (df['liq_aggregated_long_liquidation_usd'] - df['liq_long_mean_12']) / long_std
+        df['liq_short_zscore'] = (df['liq_aggregated_short_liquidation_usd'] - df['liq_short_mean_12']) / short_std
+
+        # Spike detection
+        df['liq_long_spike'] = (df['liq_aggregated_long_liquidation_usd'] > df['liq_long_mean_12'] * 2).astype(int)
+        df['liq_short_spike'] = (df['liq_aggregated_short_liquidation_usd'] > df['liq_short_mean_12'] * 2).astype(int)
+
+        self.feature_columns.extend([
+            'liq_long_ratio', 'liq_imbalance', 'liq_long_mean_12', 'liq_short_mean_12',
+            'liq_long_zscore', 'liq_short_zscore', 'liq_long_spike', 'liq_short_spike'
+        ])
+
         return df
 
     def add_longshort_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -231,15 +335,23 @@ class FeatureEngineer:
         return df
 
     def add_cross_table_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add cross-table interaction features."""
+        """Add cross-table interaction features for futures data."""
         logger.info("Adding cross-table features...")
 
         # Initialize cross-table features
         cross_features = []
 
-        # OI delta * taker imbalance (if OI data available)
-        # Note: OI data would come from cg_open_interest_aggregated_history table
-        # This is a placeholder for when that data is included
+        # OI delta * taker imbalance
+        if 'oi_delta' in df.columns and 'taker_imbalance' in df.columns:
+            df['cross_oi_taker'] = df['oi_delta'] * df['taker_imbalance']
+            cross_features.append('cross_oi_taker')
+
+        # OI delta * price return
+        if 'oi_delta' in df.columns and 'price_close_return_1' in df.columns:
+            df['cross_oi_price'] = df['oi_delta'] * df['price_close_return_1']
+            cross_features.append('cross_oi_price')
+
+        # Basis delta * taker imbalance
         if 'basis_delta' in df.columns and 'taker_imbalance' in df.columns:
             df['cross_basis_taker'] = df['basis_delta'] * df['taker_imbalance']
             cross_features.append('cross_basis_taker')
@@ -254,14 +366,35 @@ class FeatureEngineer:
             df['cross_ls_price'] = df['ls_top_vs_global'] * df['price_close_return_1']
             cross_features.append('cross_ls_price')
 
-        # Additional cross features with taker volume
+        # Taker volume * price return
         if 'taker_buy_ratio' in df.columns and 'price_close_return_1' in df.columns:
             df['cross_taker_price'] = df['taker_buy_ratio'] * df['price_close_return_1']
             cross_features.append('cross_taker_price')
 
+        # Taker imbalance * funding zscore
         if 'taker_imbalance' in df.columns and 'funding_zscore' in df.columns:
             df['cross_taker_funding'] = df['taker_imbalance'] * df['funding_zscore']
             cross_features.append('cross_taker_funding')
+
+        # Orderbook imbalance * price return
+        if 'orderbook_imbalance_usd' in df.columns and 'price_close_return_1' in df.columns:
+            df['cross_ob_price'] = df['orderbook_imbalance_usd'] * df['price_close_return_1']
+            cross_features.append('cross_ob_price')
+
+        # Liquidation imbalance * price return
+        if 'liq_imbalance' in df.columns and 'price_close_return_1' in df.columns:
+            df['cross_liq_price'] = df['liq_imbalance'] * df['price_close_return_1']
+            cross_features.append('cross_liq_price')
+
+        # Liquidation spike * price return
+        if 'liq_long_spike' in df.columns and 'price_close_return_1' in df.columns:
+            df['cross_liq_spike_price'] = df['liq_long_spike'] * df['price_close_return_1']
+            cross_features.append('cross_liq_spike_price')
+
+        # OI zscore * funding zscore (both indicate market stress)
+        if 'oi_zscore' in df.columns and 'funding_zscore' in df.columns:
+            df['cross_oi_funding'] = df['oi_zscore'] * df['funding_zscore']
+            cross_features.append('cross_oi_funding')
 
         self.feature_columns.extend(cross_features)
         logger.info(f"Added {len(cross_features)} cross-table features")
@@ -411,6 +544,8 @@ def main():
         df = engineer.add_basis_features(df)
         df = engineer.add_taker_volume_features(df)
         df = engineer.add_orderbook_features(df)
+        df = engineer.add_open_interest_features(df)
+        df = engineer.add_liquidation_features(df)
         df = engineer.add_longshort_features(df)
         df = engineer.add_cross_table_features(df)
 

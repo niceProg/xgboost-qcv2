@@ -92,7 +92,7 @@ def get_all_files_with_type() -> List[FileInfo]:
         # Data files
         '.parquet': 'data',
         '.csv': 'data',
-        'merged_7_tables': 'merged_data',
+        'merged_9_tables': 'merged_data',
         'labeled_data': 'labeled_data',
         'features_engineered': 'features',
         'X_train': 'training_data',

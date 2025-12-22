@@ -41,11 +41,17 @@ class RealtimeDatabaseMonitor:
         self.state_file = './state/last_processed.json'
 
         # Tables to monitor - Define BEFORE loading state
+        # Core training tables + support/regime filter tables
         self.tables = [
-            'cg_spot_price_history',
+            # Core training tables
+            'cg_futures_price_history',
+            'cg_futures_aggregated_taker_buy_sell_volume_history',
+            'cg_futures_aggregated_ask_bids_history',
+            'cg_open_interest_aggregated_history',
+            'cg_liquidation_aggregated_history',
+            # Support/regime filter tables
             'cg_funding_rate_history',
             'cg_futures_basis_history',
-            'cg_spot_aggregated_taker_volume_history',
             'cg_long_short_global_account_ratio_history',
             'cg_long_short_top_account_ratio_history'
         ]
@@ -66,22 +72,68 @@ class RealtimeDatabaseMonitor:
 
         # Smart table configurations - based on created_at for efficient monitoring
         self.table_configs = {
-            'cg_spot_price_history': {
+            # ===== CORE TRAINING TABLES =====
+            'cg_futures_price_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'symbol', 'interval'],
-                'min_new_records': 10,    # MINIMUM 10 records untuk trigger
+                'min_new_records': 10,
                 'priority': 'HIGH',
-                'max_check_interval': 60,   # Check every 1 minute
-                'urgent_threshold': 20,   # Trigger urgent if >20 records
+                'max_check_interval': 60,
+                'urgent_threshold': 20,
                 'business_hours_only': False,
-                'check_window': 300       # Check last 5 minutes for new records
+                'check_window': 300
             },
+            'cg_futures_aggregated_taker_buy_sell_volume_history': {
+                'time_col': 'time',
+                'key_cols': ['time', 'exchange_list', 'symbol', 'interval'],
+                'exchange_col': 'exchange_list',
+                'min_new_records': 10,
+                'priority': 'HIGH',
+                'max_check_interval': 60,
+                'urgent_threshold': 20,
+                'business_hours_only': False,
+                'check_window': 300
+            },
+            'cg_futures_aggregated_ask_bids_history': {
+                'time_col': 'time',
+                'key_cols': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent'],
+                'exchange_col': 'exchange_list',
+                'min_new_records': 10,
+                'priority': 'HIGH',
+                'max_check_interval': 60,
+                'urgent_threshold': 20,
+                'business_hours_only': False,
+                'check_window': 300
+            },
+            'cg_open_interest_aggregated_history': {
+                'time_col': 'time',
+                'key_cols': ['time', 'symbol', 'interval'],
+                'exchange_col': None,
+                'min_new_records': 10,
+                'priority': 'MEDIUM',
+                'max_check_interval': 300,
+                'urgent_threshold': 20,
+                'business_hours_only': False,
+                'check_window': 300
+            },
+            'cg_liquidation_aggregated_history': {
+                'time_col': 'time',
+                'key_cols': ['time', 'symbol', 'interval'],
+                'exchange_col': None,
+                'min_new_records': 10,
+                'priority': 'HIGH',
+                'max_check_interval': 60,
+                'urgent_threshold': 20,
+                'business_hours_only': False,
+                'check_window': 300
+            },
+            # ===== SUPPORT / REGIME FILTER TABLES =====
             'cg_funding_rate_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 10,    # MINIMUM 10 records
+                'min_new_records': 10,
                 'priority': 'HIGH',
-                'max_check_interval': 60,   # Check every 1 minute
+                'max_check_interval': 60,
                 'urgent_threshold': 20,
                 'business_hours_only': False,
                 'check_window': 300
@@ -89,20 +141,9 @@ class RealtimeDatabaseMonitor:
             'cg_futures_basis_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 10,    # MINIMUM 10 records
+                'min_new_records': 10,
                 'priority': 'HIGH',
                 'max_check_interval': 300,
-                'urgent_threshold': 20,
-                'business_hours_only': False,
-                'check_window': 300
-            },
-            'cg_spot_aggregated_taker_volume_history': {
-                'time_col': 'time',
-                'key_cols': ['time', 'exchange_name', 'symbol', 'interval'],
-                'exchange_col': 'exchange_name',
-                'min_new_records': 10,    # MINIMUM 10 records
-                'priority': 'HIGH',
-                'max_check_interval': 60,   # Check every 1 minute
                 'urgent_threshold': 20,
                 'business_hours_only': False,
                 'check_window': 300
@@ -110,9 +151,9 @@ class RealtimeDatabaseMonitor:
             'cg_long_short_global_account_ratio_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 10,    # MINIMUM 10 records
+                'min_new_records': 10,
                 'priority': 'MEDIUM',
-                'max_check_interval': 60,   # Check every 1 minute
+                'max_check_interval': 60,
                 'urgent_threshold': 20,
                 'business_hours_only': False,
                 'check_window': 300
@@ -120,9 +161,9 @@ class RealtimeDatabaseMonitor:
             'cg_long_short_top_account_ratio_history': {
                 'time_col': 'time',
                 'key_cols': ['time', 'exchange', 'pair', 'interval'],
-                'min_new_records': 10,    # MINIMUM 10 records
+                'min_new_records': 10,
                 'priority': 'MEDIUM',
-                'max_check_interval': 60,   # Check every 1 minute
+                'max_check_interval': 60,
                 'urgent_threshold': 20,
                 'business_hours_only': False,
                 'check_window': 300
@@ -556,10 +597,15 @@ class RealtimeDatabaseMonitor:
 
             # Format table names untuk lebih readable
             table_names = {
-                'cg_spot_price_history': 'Spot Price',
+                # Core training tables
+                'cg_futures_price_history': 'Futures Price',
+                'cg_futures_aggregated_taker_buy_sell_volume_history': 'Taker Volume',
+                'cg_futures_aggregated_ask_bids_history': 'Orderbook',
+                'cg_open_interest_aggregated_history': 'Open Interest',
+                'cg_liquidation_aggregated_history': 'Liquidation',
+                # Support/regime filter tables
                 'cg_funding_rate_history': 'Funding Rate',
                 'cg_futures_basis_history': 'Futures Basis',
-                'cg_spot_aggregated_taker_volume_history': 'Taker Volume',
                 'cg_long_short_global_account_ratio_history': 'Global L/S Ratio',
                 'cg_long_short_top_account_ratio_history': 'Top L/S Ratio'
             }
@@ -733,10 +779,15 @@ Table Breakdown:
                 now_wib = current_time.astimezone(jakarta_tz)
 
                 table_names = {
-                    'cg_spot_price_history': 'Spot Price',
+                    # Core training tables
+                    'cg_futures_price_history': 'Futures Price',
+                    'cg_futures_aggregated_taker_buy_sell_volume_history': 'Taker Volume',
+                    'cg_futures_aggregated_ask_bids_history': 'Orderbook',
+                    'cg_open_interest_aggregated_history': 'Open Interest',
+                    'cg_liquidation_aggregated_history': 'Liquidation',
+                    # Support/regime filter tables
                     'cg_funding_rate_history': 'Funding Rate',
                     'cg_futures_basis_history': 'Futures Basis',
-                    'cg_spot_aggregated_taker_volume_history': 'Taker Volume',
                     'cg_long_short_global_account_ratio_history': 'Global L/S Ratio',
                     'cg_long_short_top_account_ratio_history': 'Top L/S Ratio'
                 }
@@ -889,7 +940,20 @@ def main():
     parser = argparse.ArgumentParser(description='Real-time database monitor for XGBoost')
     parser.add_argument('--config', type=str, help='Configuration file path')
     parser.add_argument('--test', action='store_true', help='Test mode - check once and exit')
-    parser.add_argument('--tables', nargs='+', choices=['all', 'cg_spot_price_history', 'cg_funding_rate_history', 'cg_futures_basis_history', 'cg_spot_aggregated_taker_volume_history', 'cg_long_short_global_account_ratio_history', 'cg_long_short_top_account_ratio_history'],
+    parser.add_argument('--tables', nargs='+',
+                      choices=['all',
+                              # Core training tables
+                              'cg_futures_price_history',
+                              'cg_futures_aggregated_taker_buy_sell_volume_history',
+                              'cg_futures_aggregated_ask_bids_history',
+                              'cg_open_interest_aggregated_history',
+                              'cg_liquidation_aggregated_history',
+                              # Support/regime filter tables
+                              'cg_funding_rate_history',
+                              'cg_futures_basis_history',
+                              'cg_long_short_global_account_ratio_history',
+                              'cg_long_short_top_account_ratio_history'
+                      ],
                       help='Tables to monitor (default: all)')
 
     args = parser.parse_args()
