@@ -18,16 +18,14 @@ Support/Regime Filter Tables (4):
 """
 
 import pandas as pd
-import numpy as np
 import os
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 import logging
-import pymysql
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Tuple
 
 # Import our command line options handler
 from command_line_options import parse_arguments, validate_arguments, DataFilter
@@ -44,6 +42,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 
 class DatabaseLoader:
     """Load data from 9 database tables with filtering capabilities (5 core + 4 support/regime filter)."""
@@ -71,58 +70,76 @@ class DatabaseLoader:
         }
 
         # Define table schemas (9 tables: 5 core + 4 support/regime filter)
+        # IMPORTANT:
+        # Your DB screenshots show:
+        # - taker table: exchange='Binance', symbol='BTC', base_asset='BTC', interval='1h'
+        # - ask/bids table: exchange_list='Binance', symbol='BTC', base_asset='BTC', range_percent exists
         self.tables = {
             # ===== CORE TRAINING TABLES =====
             'cg_futures_price_history': {
                 'time_col': 'time',
                 'exchange_col': 'exchange',
-                'pair_col': 'symbol',
+                'pair_col': 'symbol',  # full pair, e.g. BTCUSDT
                 'key_columns': ['time', 'exchange', 'symbol', 'interval'],
-                'data_columns': ['open', 'high', 'low', 'close', 'volume_usd']
+                'data_columns': ['open', 'high', 'low', 'close', 'volume_usd'],
             },
+
+            # In DB: symbol is base (BTC) not BTCUSDT -> use base_asset for filtering; normalize to BTCUSDT after load
             'cg_futures_aggregated_taker_buy_sell_volume_history': {
                 'time_col': 'time',
                 'exchange_col': 'exchange',
-                'pair_col': 'symbol',
-                'key_columns': ['time', 'exchange', 'symbol', 'interval'],
-                'data_columns': ['aggregated_buy_volume', 'aggregated_sell_volume']
+                'pair_col': 'base_asset',  # base asset column in your DB
+                'key_columns': ['time', 'exchange', 'interval'],
+                'data_columns': ['aggregated_buy_volume', 'aggregated_sell_volume'],
+                'extra_columns': ['symbol', 'base_asset', 'unit'],
             },
+
+            # In DB screenshot: exchange_list, symbol (BTC), base_asset (BTC), interval, range_percent
+            # -> exchange_col must be exchange_list, pair_col should be base_asset
+            # -> normalize symbol to BTCUSDT after load
             'cg_futures_aggregated_ask_bids_history': {
                 'time_col': 'time',
-                'exchange_col': None,  # No exchange column in this table
-                'pair_col': 'symbol',
-                'key_columns': ['time', 'symbol', 'interval'],
-                'data_columns': ['aggregated_bids_usd', 'aggregated_bids_quantity',
-                               'aggregated_asks_usd', 'aggregated_asks_quantity']
+                'exchange_col': 'exchange_list',
+                'pair_col': 'base_asset',
+                'key_columns': ['time', 'exchange_list', 'interval', 'range_percent'],
+                'data_columns': [
+                    'aggregated_bids_usd', 'aggregated_bids_quantity',
+                    'aggregated_asks_usd', 'aggregated_asks_quantity'
+                ],
+                'extra_columns': ['symbol', 'base_asset'],  # for normalization/debug
             },
+
+            # NOTE: If your OI/liquidation tables also store base_asset (BTC) instead of BTCUSDT,
+            # we can apply the same pattern. For now left as-is; you can send screenshots like before.
             'cg_open_interest_aggregated_history': {
                 'time_col': 'time',
                 'exchange_col': None,
                 'pair_col': 'symbol',
                 'key_columns': ['time', 'symbol', 'interval'],
-                'data_columns': ['open', 'high', 'low', 'close']
+                'data_columns': ['open', 'high', 'low', 'close'],
             },
             'cg_liquidation_aggregated_history': {
                 'time_col': 'time',
                 'exchange_col': None,
                 'pair_col': 'symbol',
                 'key_columns': ['time', 'symbol', 'interval'],
-                'data_columns': ['aggregated_long_liquidation_usd', 'aggregated_short_liquidation_usd']
+                'data_columns': ['aggregated_long_liquidation_usd', 'aggregated_short_liquidation_usd'],
             },
+
             # ===== SUPPORT / REGIME FILTER TABLES =====
             'cg_funding_rate_history': {
                 'time_col': 'time',
                 'exchange_col': 'exchange',
                 'pair_col': 'pair',
                 'key_columns': ['time', 'exchange', 'pair', 'interval'],
-                'data_columns': ['open', 'high', 'low', 'close']
+                'data_columns': ['open', 'high', 'low', 'close'],
             },
             'cg_futures_basis_history': {
                 'time_col': 'time',
                 'exchange_col': 'exchange',
                 'pair_col': 'pair',
                 'key_columns': ['time', 'exchange', 'pair', 'interval'],
-                'data_columns': ['open_basis', 'close_basis', 'open_change', 'close_change']
+                'data_columns': ['open_basis', 'close_basis', 'open_change', 'close_change'],
             },
             'cg_long_short_global_account_ratio_history': {
                 'time_col': 'time',
@@ -130,7 +147,7 @@ class DatabaseLoader:
                 'pair_col': 'pair',
                 'key_columns': ['time', 'exchange', 'pair', 'interval'],
                 'data_columns': ['global_account_long_percent', 'global_account_short_percent',
-                               'global_account_long_short_ratio']
+                                 'global_account_long_short_ratio'],
             },
             'cg_long_short_top_account_ratio_history': {
                 'time_col': 'time',
@@ -138,14 +155,82 @@ class DatabaseLoader:
                 'pair_col': 'pair',
                 'key_columns': ['time', 'exchange', 'pair', 'interval'],
                 'data_columns': ['top_account_long_percent', 'top_account_short_percent',
-                               'top_account_long_short_ratio']
-            }
+                                 'top_account_long_short_ratio'],
+            },
         }
+
+    def _split_pair(self, pair: str) -> Tuple[str, str]:
+        """Split pair string like BTCUSDT into (base, quote)."""
+        if not pair:
+            return "", ""
+        pair = pair.upper().replace("/", "").replace("-", "").replace("_", "")
+        known_quotes = ["USDT", "USDC", "BUSD", "USD", "BTC", "ETH"]
+        for q in known_quotes:
+            if pair.endswith(q) and len(pair) > len(q):
+                return pair[:-len(q)], q
+        # fallback: assume last 3 is quote (not perfect but better than nothing)
+        return pair[:-3], pair[-3:]
+
+    def _normalize_pair_string(self, s: str) -> str:
+        if s is None:
+            return ""
+        return str(s).upper().replace("/", "").replace("-", "").replace("_", "").strip()
+
+    def build_where_clause_for_table(self, table_name: str, table_info: dict) -> str:
+        """Build WHERE clause robustly per-table (case-insensitive exchange + base_asset handling)."""
+        conditions = []
+
+        # --- Time condition ---
+        time_col = f"`{table_info['time_col']}`"
+        if getattr(self.data_filter, "days_filter", None):
+            cutoff = int((datetime.now() - timedelta(days=self.data_filter.days_filter)).timestamp() * 1000)
+            conditions.append(f"{time_col} >= {cutoff}")
+
+        if getattr(self.data_filter, "time_range", None):
+            start_time, end_time = self.data_filter.time_range
+            if start_time:
+                conditions.append(f"{time_col} >= {int(start_time)}")
+            if end_time:
+                conditions.append(f"{time_col} <= {int(end_time)}")
+
+        # --- Exchange condition (case-insensitive) ---
+        exchange_col = table_info.get("exchange_col")
+        if exchange_col and getattr(self.data_filter, "exchange_filter", None):
+            ex_list = [str(x).lower().strip() for x in self.data_filter.exchange_filter]
+            ex_sql = ", ".join([f"'{x}'" for x in ex_list])
+            conditions.append(f"LOWER(`{exchange_col}`) IN ({ex_sql})")
+
+        # --- Pair/Symbol condition ---
+        pair_filters = getattr(self.data_filter, "pair_filter", None) or getattr(self.data_filter, "symbol_filter", None)
+        if pair_filters:
+            pair_filters_norm = [self._normalize_pair_string(p) for p in pair_filters]
+
+            pair_col = table_info.get("pair_col")
+            if pair_col:
+                if pair_col == "base_asset":
+                    bases = []
+                    for p in pair_filters_norm:
+                        b, _q = self._split_pair(p)
+                        if b:
+                            bases.append(b)
+                    if bases:
+                        base_sql = ", ".join([f"'{b}'" for b in sorted(set(bases))])
+                        conditions.append(f"`base_asset` IN ({base_sql})")
+                else:
+                    pair_sql = ", ".join([f"'{p}'" for p in sorted(set(pair_filters_norm))])
+                    conditions.append(f"`{pair_col}` IN ({pair_sql})")
+
+        # --- Interval condition ---
+        if getattr(self.data_filter, "interval_filter", None):
+            intervals = list(set(self.data_filter.interval_filter))
+            int_sql = ", ".join([f"'{i}'" for i in intervals])
+            conditions.append(f"`interval` IN ({int_sql})")
+
+        return " AND ".join(conditions) if conditions else "1=1"
 
     def get_db_engine(self):
         """Establish database engine using SQLAlchemy."""
         try:
-            # Create MySQL connection string
             connection_string = (
                 f"mysql+pymysql://{self.db_config['user']}:{self.db_config['password']}"
                 f"@{self.db_config['host']}:{self.db_config['port']}/{self.db_config['database']}"
@@ -158,12 +243,20 @@ class DatabaseLoader:
             raise
 
     def load_table_data(self, table_name: str) -> pd.DataFrame:
-        """Load data from a specific table with filters."""
+        """Load data from a specific table with robust filters + normalization."""
         table_info = self.tables[table_name]
-        where_clause = self.data_filter.build_where_clause(table_name)
+        where_clause = self.build_where_clause_for_table(table_name, table_info)
 
-        # Build SELECT query with proper backtick quoting for column names
-        columns = table_info['key_columns'] + table_info['data_columns']
+        # Build SELECT columns (include extra_columns if any)
+        columns = []
+        columns += table_info.get('key_columns', [])
+        columns += table_info.get('data_columns', [])
+        columns += table_info.get('extra_columns', [])
+
+        # remove duplicates while preserving order
+        seen = set()
+        columns = [c for c in columns if not (c in seen or seen.add(c))]
+
         quoted_columns = [f"`{col}`" for col in columns]
         quoted_table_name = f"`{table_name}`"
         quoted_time_col = f"`{table_info['time_col']}`"
@@ -182,7 +275,47 @@ class DatabaseLoader:
             engine = self.get_db_engine()
             df = pd.read_sql_query(query, engine)
             logger.info(f"Loaded {len(df)} rows from {table_name}")
+
+            if df.empty:
+                return df
+
+            # Normalize exchange strings (trim)
+            for ex_col in ["exchange", "exchange_list"]:
+                if ex_col in df.columns:
+                    df[ex_col] = df[ex_col].astype(str).str.strip()
+
+            # Build mapping base -> requested full pair (BTC -> BTCUSDT) from CLI filters
+            requested_pairs = (getattr(self.data_filter, "pair_filter", None)
+                               or getattr(self.data_filter, "symbol_filter", None)
+                               or [])
+            requested_pairs_norm = [self._normalize_pair_string(p) for p in requested_pairs]
+            base_to_pair = {}
+            for p in requested_pairs_norm:
+                b, q = self._split_pair(p)
+                if b and q:
+                    base_to_pair[b] = f"{b}{q}"
+
+            # --- Normalization: ensure 'symbol' becomes full pair (e.g., BTCUSDT) where needed ---
+            if table_name in (
+                "cg_futures_aggregated_taker_buy_sell_volume_history",
+                "cg_futures_aggregated_ask_bids_history",
+            ):
+                # DB provides base_asset, symbol might be BTC not BTCUSDT
+                if "base_asset" in df.columns:
+                    if base_to_pair:
+                        df["symbol"] = df["base_asset"].astype(str).map(base_to_pair).fillna(
+                            df["base_asset"].astype(str) + "USDT"
+                        )
+                    else:
+                        df["symbol"] = df["base_asset"].astype(str) + "USDT"
+
+                # Also create a unified 'exchange' column for downstream consistency (optional but helpful)
+                if "exchange" not in df.columns:
+                    if "exchange_list" in df.columns:
+                        df["exchange"] = df["exchange_list"].astype(str)
+
             return df
+
         except Exception as e:
             logger.error(f"Error loading {table_name}: {e}")
             return pd.DataFrame()
@@ -190,14 +323,12 @@ class DatabaseLoader:
     def load_all_tables(self) -> Dict[str, pd.DataFrame]:
         """Load data from all 9 tables (5 core + 4 support/regime filter)."""
         all_data = {}
-
         for table_name in self.tables.keys():
             df = self.load_table_data(table_name)
             if not df.empty:
                 all_data[table_name] = df
             else:
                 logger.warning(f"No data loaded from {table_name}")
-
         return all_data
 
     def save_table_data(self, table_name: str, df: pd.DataFrame):
@@ -207,7 +338,6 @@ class DatabaseLoader:
             return
 
         filename = f"{table_name}.parquet"
-        # Save to datasets/raw directory
         raw_data_dir = self.output_dir / 'datasets' / 'raw'
         raw_data_dir.mkdir(parents=True, exist_ok=True)
         filepath = raw_data_dir / filename
@@ -216,7 +346,6 @@ class DatabaseLoader:
             df.to_parquet(filepath, index=False)
             logger.info(f"Saved {len(df)} rows to {filepath}")
 
-            # Store to database if enabled
             if self.enable_db_storage and self.db_storage:
                 try:
                     stored_path = self.db_storage.store_file(
@@ -231,83 +360,6 @@ class DatabaseLoader:
         except Exception as e:
             logger.error(f"Error saving {table_name}: {e}")
 
-    def load_data_from_csv_files(self, csv_dir: str) -> Dict[str, pd.DataFrame]:
-        """Alternative: Load data from CSV files if database is not available."""
-        csv_path = Path(csv_dir)
-        all_data = {}
-
-        # Expected CSV filenames
-        csv_files = {
-            # Core training tables
-            'cg_futures_price_history': 'futures_price_history.csv',
-            'cg_futures_aggregated_taker_buy_sell_volume_history': 'futures_taker_volume.csv',
-            'cg_futures_aggregated_ask_bids_history': 'futures_ask_bids.csv',
-            'cg_open_interest_aggregated_history': 'open_interest.csv',
-            'cg_liquidation_aggregated_history': 'liquidation.csv',
-            # Support/regime filter tables
-            'cg_funding_rate_history': 'funding_rate_history.csv',
-            'cg_futures_basis_history': 'futures_basis_history.csv',
-            'cg_long_short_global_account_ratio_history': 'ls_global_ratio_history.csv',
-            'cg_long_short_top_account_ratio_history': 'ls_top_ratio_history.csv'
-        }
-
-        for table_name, filename in csv_files.items():
-            filepath = csv_path / filename
-            if filepath.exists():
-                try:
-                    df = pd.read_csv(filepath)
-                    df = self.apply_filters_to_dataframe(df, table_name)
-                    all_data[table_name] = df
-                    logger.info(f"Loaded {len(df)} rows from {filename}")
-                except Exception as e:
-                    logger.error(f"Error loading {filename}: {e}")
-            else:
-                logger.warning(f"CSV file not found: {filepath}")
-
-        return all_data
-
-    def apply_filters_to_dataframe(self, df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-        """Apply data filters to a DataFrame."""
-        if df.empty:
-            return df
-
-        table_info = self.tables[table_name]
-        filtered_df = df.copy()
-
-        # Time filter
-        time_condition = self.data_filter.get_time_filter_sql(table_info['time_col'])
-        if time_condition and time_condition != "1=1":
-            # Parse SQL condition manually (simplified)
-            if self.data_filter.days_filter:
-                cutoff_time = int((datetime.now() - timedelta(days=self.data_filter.days_filter)).timestamp() * 1000)
-                filtered_df = filtered_df[filtered_df[table_info['time_col']] >= cutoff_time]
-
-            if self.data_filter.time_range:
-                start_time, end_time = self.data_filter.time_range
-                if start_time:
-                    filtered_df = filtered_df[filtered_df[table_info['time_col']] >= start_time]
-                if end_time:
-                    filtered_df = filtered_df[filtered_df[table_info['time_col']] <= end_time]
-
-        # Exchange filter (skip if table doesn't have exchange column)
-        if self.data_filter.exchange_filter and table_info['exchange_col'] is not None:
-            exchange_col = table_info['exchange_col']
-            filtered_df = filtered_df[filtered_df[exchange_col].isin(self.data_filter.exchange_filter)]
-
-        # Pair/Symbol filter
-        if self.data_filter.pair_filter:
-            pair_col = table_info['pair_col']
-            filtered_df = filtered_df[filtered_df[pair_col].isin(self.data_filter.pair_filter)]
-        elif self.data_filter.symbol_filter:
-            pair_col = table_info['pair_col']
-            filtered_df = filtered_df[filtered_df[pair_col].isin(self.data_filter.symbol_filter)]
-
-        # Interval filter
-        if self.data_filter.interval_filter:
-            filtered_df = filtered_df[filtered_df['interval'].isin(self.data_filter.interval_filter)]
-
-        return filtered_df.sort_values(table_info['time_col'])
-
     def validate_data_quality(self, df: pd.DataFrame, table_name: str) -> bool:
         """Validate data quality and print statistics."""
         if df.empty:
@@ -316,63 +368,52 @@ class DatabaseLoader:
 
         logger.info(f"\n=== Data Quality Report for {table_name} ===")
         logger.info(f"Total rows: {len(df)}")
-        logger.info(f"Date range: {df[self.tables[table_name]['time_col']].min()} to {df[self.tables[table_name]['time_col']].max()}")
+        tcol = self.tables[table_name]['time_col']
+        if tcol in df.columns:
+            logger.info(f"Date range: {df[tcol].min()} to {df[tcol].max()}")
 
-        # Check for missing values
         missing_counts = df.isnull().sum()
         if missing_counts.any():
-            logger.warning(f"Missing values:\n{missing_counts[missing_counts > 0]}")
+            bad = missing_counts[missing_counts > 0]
+            if len(bad) > 0:
+                logger.warning(f"Missing values:\n{bad}")
         else:
             logger.info("No missing values found")
 
-        # Check for duplicates
-        key_cols = self.tables[table_name]['key_columns']
-        duplicates = df.duplicated(subset=key_cols).sum()
+        key_cols = [c for c in self.tables[table_name]['key_columns'] if c in df.columns]
+        duplicates = df.duplicated(subset=key_cols).sum() if key_cols else 0
         if duplicates > 0:
-            logger.warning(f"Found {duplicates} duplicate rows")
+            logger.warning(f"Found {duplicates} duplicate rows (keys={key_cols})")
         else:
             logger.info("No duplicate rows found")
 
         logger.info("=" * 50)
         return True
 
+
 def main():
     """Main function to load all data."""
     args = parse_arguments()
     validate_arguments(args)
 
-    # Set up logging level based on verbose flag
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # Create data filter
     data_filter = DataFilter(args)
     data_filter.print_filter_summary()
 
-    # Enable database storage based on environment variable
     enable_db_storage = os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true'
-
-    # Initialize database loader
     loader = DatabaseLoader(data_filter, args.output_dir, enable_db_storage)
 
     # DATABASE STORAGE DISABLED per client requirement
-    # Client tidak mau: xgboost_training_sessions, xgboost_features, xgboost_evaluations
     if enable_db_storage and loader.db_storage:
         logger.info("📝 Training session creation disabled per client requirement")
-        loader.db_storage = None  # Disable further DB operations
+        loader.db_storage = None
 
     try:
-        # Try to load from database first
         logger.info("Attempting to load data from database...")
         all_data = loader.load_all_tables()
 
-        # If no data loaded, try CSV files
-        if not all_data:
-            logger.warning("No data loaded from database. Trying CSV files...")
-            csv_dir = args.output_dir / 'csv_files'
-            all_data = loader.load_data_from_csv_files(str(csv_dir))
-
-        # Validate and save data
         if all_data:
             logger.info(f"\n=== Summary ===")
             logger.info(f"Successfully loaded data from {len(all_data)} tables:")
@@ -382,37 +423,15 @@ def main():
                 loader.save_table_data(table_name, df)
 
             logger.info(f"\nAll data saved to {loader.output_dir}")
-
-            # Update session status
-            if loader.db_storage:
-                try:
-                    total_samples = sum(len(df) for df in all_data.values())
-                    loader.db_storage.update_session_status(
-                        status='data_loaded',
-                        metrics={'total_samples': total_samples}
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to update session status: {e}")
-
             logger.info("Ready for merge_7_tables.py")
         else:
-            logger.error("No data could be loaded. Please check your database connection or CSV files.")
-
-            # Update session status to failed
-            if loader.db_storage:
-                try:
-                    loader.db_storage.update_session_status(
-                        status='failed',
-                        notes="Failed to load data"
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to update session status: {e}")
-
+            logger.error("No data could be loaded. Please check your database connection.")
             sys.exit(1)
 
     except Exception as e:
         logger.error(f"Error in data loading process: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
