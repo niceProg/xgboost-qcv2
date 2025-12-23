@@ -312,8 +312,8 @@ class DataFilter:
                 end_dt = datetime.datetime.fromtimestamp(end_time/1000)
                 print(f"End time: {end_dt} ({end_time})")
         else:
-            # Show time range based on mode
-            time_range = self.get_daily_time_filter()
+            # Show time range based on mode (initial/daily)
+            time_range = self.get_mode_time_filter()
             if time_range:
                 start_time, end_time = time_range
                 import datetime
