@@ -107,10 +107,6 @@ class DataFilter:
         self.minutes_filter = args.minutes  # For real-time updates
         self.daily_mode = args.daily if hasattr(args, 'daily') else False
 
-        # Default to 30 days if no time filter specified
-        if not self.time_range and not self.days_filter and not self.daily_mode and not self.minutes_filter:
-            self.days_filter = 30
-
         # Process minutes filter into time_range
         if self.minutes_filter and not self.time_range:
             self.time_range = self._get_minutes_time_range(self.minutes_filter)
