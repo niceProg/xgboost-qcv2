@@ -11,7 +11,6 @@ EXCHANGE=${EXCHANGE:-binance}
 PAIR=${PAIR:-BTCUSDT}
 INTERVAL=${INTERVAL:-1h}
 OUTPUT_DIR=${OUTPUT_DIR:-./output_train}
-DEFAULT_DAYS=${DEFAULT_DAYS:-30}  # Default days if no mode specified
 
 echo "Configuration:"
 echo "  Exchange: $EXCHANGE"
@@ -19,8 +18,21 @@ echo "  Pair: $PAIR"
 echo "  Interval: $INTERVAL"
 echo "  Output Directory: $OUTPUT_DIR"
 echo ""
-echo "Note: Mode is optional. Defaults to --days 30 if not specified."
-echo "Available options: --daily, --days N, --time start,end"
+echo "Usage Options:"
+echo "1. Default (all data in database):"
+echo "   ./simple_run.sh"
+echo ""
+echo "2. Filter by exchange, pair, interval:"
+echo "   EXCHANGE=okx PAIR=ETHUSDT INTERVAL=4h ./simple_run.sh"
+echo ""
+echo "3. Load 30 hari terakhir:"
+echo "   ./simple_run.sh --days 30"
+echo ""
+echo "4. Load data dalam time range tertentu (milliseconds timestamp):"
+echo "   ./simple_run.sh --time 1700000000000,1701000000000"
+echo ""
+echo "5. Combine semua:"
+echo "   EXCHANGE=binance PAIR=ETHUSDT INTERVAL=1h ./simple_run.sh --days 60"
 echo ""
 
 # Create output directory
@@ -51,17 +63,20 @@ run_step() {
     fi
 }
 
-# Check mode flags (optional now, default to --days 30 if not specified)
+# Parse mode flags (optional)
 MODE_FLAG=""
-if [[ "$*" == *"--daily"* ]]; then
-    echo "🔄 Running with --daily mode (current day data only)"
-    MODE_FLAG="--daily"
-elif [[ "$*" == *"--days"* ]]; then
+if [[ "$*" == *"--days"* ]]; then
     # Extract days value from arguments
     for arg in "$@"; do
-        if [[ "$arg" == "--days"* ]]; then
+        if [[ "$arg" == "--days" ]]; then
+            # Next arg is the value
+            MODE_FLAG="--days $2"
+            echo "🔄 Running with --days mode (last $2 days)"
+            break
+        elif [[ "$arg" == "--days="* ]]; then
+            # Value is in the same arg
             MODE_FLAG="$arg"
-            DAYS_VALUE="${arg#--days}"
+            DAYS_VALUE="${arg#--days=}"
             echo "🔄 Running with --days mode (last ${DAYS_VALUE} days)"
             break
         fi
@@ -69,17 +84,22 @@ elif [[ "$*" == *"--days"* ]]; then
 elif [[ "$*" == *"--time"* ]]; then
     # Extract time value from arguments
     for arg in "$@"; do
-        if [[ "$arg" == "--time"* ]]; then
+        if [[ "$arg" == "--time" ]]; then
+            # Next arg is the value
+            MODE_FLAG="--time $2"
+            echo "🔄 Running with --time mode (custom time range in milliseconds)"
+            break
+        elif [[ "$arg" == "--time="* ]]; then
+            # Value is in the same arg
             MODE_FLAG="$arg"
-            echo "🔄 Running with --time mode (custom time range)"
+            echo "🔄 Running with --time mode (custom time range in milliseconds)"
             break
         fi
     done
 else
-    # Default: use --days ${DEFAULT_DAYS} if no mode specified
-    echo "🔄 No mode specified, using default: --days ${DEFAULT_DAYS} (last ${DEFAULT_DAYS} days)"
-    echo "   (You can specify: --daily, --days N, or --time start,end)"
-    MODE_FLAG="--days ${DEFAULT_DAYS}"
+    # Default: no time filter (load all data from database)
+    echo "🔄 No time filter specified, loading all data from database"
+    echo "   (You can specify: --days N or --time start,end)"
 fi
 
 # Run each step with the appropriate flags
@@ -127,10 +147,7 @@ fi
 
 echo ""
 echo "Next steps:"
-echo "1. Deploy real-time system: cd production-v2 && ./deploy.sh"
-echo "2. Access structured API: http://localhost:8000/output_train/"
-echo "3. View latest model: http://localhost:8000/output_train/models/latest"
-echo "4. View dataset summary: http://localhost:8000/output_train/datasets/summary"
+echo "1. Check model in database"
+echo "2. Access API for model predictions"
 echo ""
-echo "✅ Pipeline completed with structured output!"
-echo "📁 New structure ready for production-v2 API access"
+echo "✅ Pipeline completed!"
