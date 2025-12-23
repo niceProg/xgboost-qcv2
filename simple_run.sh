@@ -48,54 +48,25 @@ run_step() {
     fi
 }
 
-# Check flags and set mode
+# Parse extra flags (optional: --days N, --time start,end)
 EXTRA_FLAGS=""
-MODE_SPECIFIED=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --days)
+            EXTRA_FLAGS="$EXTRA_FLAGS --days $2"
+            shift 2
+            ;;
+        --time)
+            EXTRA_FLAGS="$EXTRA_FLAGS --time $2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
-# Check for mode flags
-if [[ "$*" == *"--initial"* ]]; then
-    echo "🔄 Running with --initial mode (historical data from 2024)"
-    EXTRA_FLAGS="--initial"
-    MODE_SPECIFIED="yes"
-elif [[ "$*" == *"--daily"* ]]; then
-    echo "🔄 Running with --daily mode (current day data only)"
-    EXTRA_FLAGS="--daily"
-    MODE_SPECIFIED="yes"
-elif [[ "$*" == *"--days"* ]]; then
-    # Extract days value
-    DAYS_VALUE=$(echo "$@" | grep -o -- '--days [0-9]*' | awk '{print $2}')
-    if [ -n "$DAYS_VALUE" ]; then
-        echo "🔄 Running with --days $DAYS_VALUE mode"
-        EXTRA_FLAGS="--days $DAYS_VALUE"
-        MODE_SPECIFIED="yes"
-    fi
-elif [[ "$*" == *"--time"* ]]; then
-    # Extract time value
-    TIME_VALUE=$(echo "$@" | grep -o -- '--time [^ ]*' | awk '{print $2}')
-    if [ -n "$TIME_VALUE" ]; then
-        echo "🔄 Running with --time $TIME_VALUE mode"
-        EXTRA_FLAGS="--time $TIME_VALUE"
-        MODE_SPECIFIED="yes"
-    fi
-fi
-
-if [ "$MODE_SPECIFIED" != "yes" ]; then
-    echo "⚠️  No mode specified. Please specify either:"
-    echo "   --initial  (for historical data from 2024)"
-    echo "   --daily    (for current day data only)"
-    echo "   --days N   (for last N days)"
-    echo "   --time start,end (for custom time range)"
-    echo ""
-    echo "Example usage:"
-    echo "  $0 --initial"
-    echo "  $0 --daily"
-    echo "  $0 --days 30"
-    echo "  $0 --time 1609459200000,1640995199000"
-    echo ""
-    exit 1
-fi
-
-# Run each step with the appropriate flags
+# Run each step
 run_step "load_database.py" "Step 1: Load Database" $EXTRA_FLAGS
 run_step "merge_7_tables.py" "Step 2: Merge Tables" $EXTRA_FLAGS
 run_step "feature_engineering.py" "Step 3: Feature Engineering" $EXTRA_FLAGS

@@ -68,16 +68,6 @@ Examples:
         help='Number of recent days to include'
     )
 
-    
-    # Mode selection
-    parser.add_argument(
-        '--mode',
-        type=str,
-        choices=['initial', 'daily'],
-        default='initial',
-        help='Training mode: initial (historical from 2024) or daily (current day only)'
-    )
-
     # Output options
     parser.add_argument(
         '--output-dir',
@@ -106,7 +96,6 @@ class DataFilter:
         self.time_range = self._parse_time_range(args.time) if args.time else None
         self.days_filter = args.days
         self.minutes_filter = args.minutes  # New: minutes filter for real-time
-        self.mode = args.mode
 
         # Process minutes filter into time_range
         if self.minutes_filter and not self.time_range:
@@ -115,23 +104,6 @@ class DataFilter:
     def _parse_comma_list(self, comma_str: str) -> List[str]:
         """Parse comma-separated list into list of strings."""
         return [item.strip() for item in comma_str.split(',') if item.strip()]
-
-  
-    def get_daily_time_filter(self):
-        """Get time filter for daily mode."""
-        if self.mode == 'daily':
-            # For daily mode, load data from start of day
-            import datetime
-            today_start = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            today_end = datetime.datetime.now()
-            return (int(today_start.timestamp() * 1000), int(today_end.timestamp() * 1000))
-        elif self.mode == 'initial':
-            # For initial mode, load data from 2024 onwards
-            import datetime
-            start_dt = datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
-            end_dt = datetime.datetime.now(datetime.timezone.utc)
-            return (int(start_dt.timestamp() * 1000), int(end_dt.timestamp() * 1000))
-        return None
 
     def _get_minutes_time_range(self, minutes: int) -> tuple:
         """Get time range for the last N minutes for real-time updates."""
@@ -165,17 +137,6 @@ class DataFilter:
         # Quote the column name with backticks to handle reserved keywords
         quoted_col = f"`{time_col}`"
 
-        # Check for daily/initial mode first
-        time_range = self.get_daily_time_filter()
-        if time_range:
-            start_time, end_time = time_range
-            conditions = []
-            if start_time:
-                conditions.append(f"{quoted_col} >= {start_time}")
-            if end_time:
-                conditions.append(f"{quoted_col} <= {end_time}")
-            return " AND ".join(conditions) if conditions else None
-
         if self.days_filter:
             # Calculate timestamp for N days ago
             now = datetime.datetime.now()
@@ -192,6 +153,7 @@ class DataFilter:
                 conditions.append(f"{quoted_col} <= {end_time}")
             return " AND ".join(conditions) if conditions else None
 
+        # No time filter specified - load all available data
         return None
 
     def get_exchange_filter_sql(self, exchange_col: str = 'exchange') -> str:
@@ -283,15 +245,6 @@ class DataFilter:
             if end_time:
                 end_dt = datetime.datetime.fromtimestamp(end_time/1000)
                 print(f"End time: {end_dt} ({end_time})")
-        else:
-            # Show time range based on mode
-            time_range = self.get_daily_time_filter()
-            if time_range:
-                start_time, end_time = time_range
-                import datetime
-                start_dt = datetime.datetime.fromtimestamp(start_time/1000)
-                end_dt = datetime.datetime.fromtimestamp(end_time/1000)
-                print(f"Time Range: {start_dt} to {end_dt}")
         if self.days_filter:
             print(f"Days: {self.days_filter}")
         if self.minutes_filter:
