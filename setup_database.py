@@ -47,13 +47,13 @@ class DatabaseSetup:
                 'name': 'cg_futures_aggregated_taker_buy_sell_volume_history',
                 'time_col': 'time',
                 'symbol_col': 'symbol',
-                'key_cols': ['time', 'exchange_list', 'symbol', 'interval']
+                'key_cols': ['time', 'exchange', 'symbol', 'interval']
             },
             {
                 'name': 'cg_futures_aggregated_ask_bids_history',
                 'time_col': 'time',
                 'symbol_col': 'symbol',
-                'key_cols': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent']
+                'key_cols': ['time', 'exchange', 'symbol', 'interval']
             },
             {
                 'name': 'cg_open_interest_aggregated_history',

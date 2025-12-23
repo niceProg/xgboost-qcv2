@@ -231,10 +231,6 @@ class DataFilter:
         # Tables without exchange column (aggregated tables)
         no_exchange_tables = ['cg_open_interest_aggregated_history', 'cg_liquidation_aggregated_history']
 
-        # Tables with exchange_list column
-        exchange_list_tables = ['cg_futures_aggregated_taker_buy_sell_volume_history',
-                               'cg_futures_aggregated_ask_bids_history']
-
         # Tables with symbol column (vs pair column)
         symbol_tables = ['cg_futures_price_history',
                         'cg_futures_aggregated_taker_buy_sell_volume_history',
@@ -245,8 +241,6 @@ class DataFilter:
         # Determine column names based on table
         if table_name in no_exchange_tables:
             exchange_col = None  # No exchange filter for these tables
-        elif table_name in exchange_list_tables:
-            exchange_col = 'exchange_list'
         else:
             exchange_col = 'exchange'
 

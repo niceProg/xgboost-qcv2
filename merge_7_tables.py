@@ -57,13 +57,13 @@ class TableMerger:
             },
             'cg_futures_aggregated_taker_buy_sell_volume_history': {
                 'prefix': 'taker',
-                'key_cols': ['time', 'exchange_list', 'symbol', 'interval'],
+                'key_cols': ['time', 'exchange', 'symbol', 'interval'],
                 'data_cols': ['aggregated_buy_volume', 'aggregated_sell_volume'],
                 'required': False
             },
             'cg_futures_aggregated_ask_bids_history': {
                 'prefix': 'orderbook',
-                'key_cols': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent'],
+                'key_cols': ['time', 'exchange', 'symbol', 'interval'],
                 'data_cols': ['aggregated_bids_usd', 'aggregated_bids_quantity',
                              'aggregated_asks_usd', 'aggregated_asks_quantity'],
                 'required': False

@@ -85,8 +85,8 @@ class RealtimeDatabaseMonitor:
             },
             'cg_futures_aggregated_taker_buy_sell_volume_history': {
                 'time_col': 'time',
-                'key_cols': ['time', 'exchange_list', 'symbol', 'interval'],
-                'exchange_col': 'exchange_list',
+                'key_cols': ['time', 'exchange', 'symbol', 'interval'],
+                'exchange_col': 'exchange',
                 'min_new_records': 10,
                 'priority': 'HIGH',
                 'max_check_interval': 60,
@@ -96,8 +96,8 @@ class RealtimeDatabaseMonitor:
             },
             'cg_futures_aggregated_ask_bids_history': {
                 'time_col': 'time',
-                'key_cols': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent'],
-                'exchange_col': 'exchange_list',
+                'key_cols': ['time', 'exchange', 'symbol', 'interval'],
+                'exchange_col': 'exchange',
                 'min_new_records': 10,
                 'priority': 'HIGH',
                 'max_check_interval': 60,

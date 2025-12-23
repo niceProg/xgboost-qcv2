@@ -82,16 +82,16 @@ class DatabaseLoader:
             },
             'cg_futures_aggregated_taker_buy_sell_volume_history': {
                 'time_col': 'time',
-                'exchange_col': 'exchange_list',
+                'exchange_col': 'exchange',
                 'pair_col': 'symbol',
-                'key_columns': ['time', 'exchange_list', 'symbol', 'interval'],
+                'key_columns': ['time', 'exchange', 'symbol', 'interval'],
                 'data_columns': ['aggregated_buy_volume', 'aggregated_sell_volume']
             },
             'cg_futures_aggregated_ask_bids_history': {
                 'time_col': 'time',
-                'exchange_col': 'exchange_list',
+                'exchange_col': 'exchange',
                 'pair_col': 'symbol',
-                'key_columns': ['time', 'exchange_list', 'symbol', 'interval', 'range_percent'],
+                'key_columns': ['time', 'exchange', 'symbol', 'interval'],
                 'data_columns': ['aggregated_bids_usd', 'aggregated_bids_quantity',
                                'aggregated_asks_usd', 'aggregated_asks_quantity']
             },
