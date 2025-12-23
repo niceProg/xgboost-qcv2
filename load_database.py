@@ -70,10 +70,11 @@ class DatabaseLoader:
         }
 
         # Define table schemas (9 tables: 5 core + 4 support/regime filter)
-        # IMPORTANT:
-        # Your DB screenshots show:
+        # IMPORTANT based on your DB screenshots:
         # - taker table: exchange='Binance', symbol='BTC', base_asset='BTC', interval='1h'
         # - ask/bids table: exchange_list='Binance', symbol='BTC', base_asset='BTC', range_percent exists
+        # - open interest aggregated: symbol='BTC', interval='1h', OHLC columns exist
+        # - liquidation aggregated: symbol='BTC', interval='1h', liquidation columns exist
         self.tables = {
             # ===== CORE TRAINING TABLES =====
             'cg_futures_price_history': {
@@ -94,9 +95,7 @@ class DatabaseLoader:
                 'extra_columns': ['symbol', 'base_asset', 'unit'],
             },
 
-            # In DB screenshot: exchange_list, symbol (BTC), base_asset (BTC), interval, range_percent
-            # -> exchange_col must be exchange_list, pair_col should be base_asset
-            # -> normalize symbol to BTCUSDT after load
+            # In DB: exchange_list, symbol (BTC), base_asset (BTC), interval, range_percent
             'cg_futures_aggregated_ask_bids_history': {
                 'time_col': 'time',
                 'exchange_col': 'exchange_list',
@@ -106,24 +105,29 @@ class DatabaseLoader:
                     'aggregated_bids_usd', 'aggregated_bids_quantity',
                     'aggregated_asks_usd', 'aggregated_asks_quantity'
                 ],
-                'extra_columns': ['symbol', 'base_asset'],  # for normalization/debug
+                'extra_columns': ['symbol', 'base_asset'],
             },
 
-            # NOTE: If your OI/liquidation tables also store base_asset (BTC) instead of BTCUSDT,
-            # we can apply the same pattern. For now left as-is; you can send screenshots like before.
+            # In DB: symbol is base asset (BTC), no exchange column
             'cg_open_interest_aggregated_history': {
                 'time_col': 'time',
                 'exchange_col': None,
-                'pair_col': 'symbol',
+                'pair_col': 'symbol',  # contains BTC (base), not BTCUSDT
                 'key_columns': ['time', 'symbol', 'interval'],
                 'data_columns': ['open', 'high', 'low', 'close'],
+                'extra_columns': ['unit'],
+                'pair_is_base_asset': True,  # custom flag
             },
+
+            # FIXED based on your liquidation screenshot: symbol is base asset (BTC), no exchange column
+            # -> filter by base derived from pair_filter, then normalize symbol to BTCUSDT after load
             'cg_liquidation_aggregated_history': {
                 'time_col': 'time',
                 'exchange_col': None,
-                'pair_col': 'symbol',
+                'pair_col': 'symbol',  # contains BTC (base), not BTCUSDT
                 'key_columns': ['time', 'symbol', 'interval'],
                 'data_columns': ['aggregated_long_liquidation_usd', 'aggregated_short_liquidation_usd'],
+                'pair_is_base_asset': True,  # custom flag
             },
 
             # ===== SUPPORT / REGIME FILTER TABLES =====
@@ -168,7 +172,6 @@ class DatabaseLoader:
         for q in known_quotes:
             if pair.endswith(q) and len(pair) > len(q):
                 return pair[:-len(q)], q
-        # fallback: assume last 3 is quote (not perfect but better than nothing)
         return pair[:-3], pair[-3:]
 
     def _normalize_pair_string(self, s: str) -> str:
@@ -204,10 +207,21 @@ class DatabaseLoader:
         pair_filters = getattr(self.data_filter, "pair_filter", None) or getattr(self.data_filter, "symbol_filter", None)
         if pair_filters:
             pair_filters_norm = [self._normalize_pair_string(p) for p in pair_filters]
-
             pair_col = table_info.get("pair_col")
+
             if pair_col:
-                if pair_col == "base_asset":
+                # Special: table's pair_col is actually BASE asset (BTC), not full pair
+                if table_info.get("pair_is_base_asset", False):
+                    bases = []
+                    for p in pair_filters_norm:
+                        b, _q = self._split_pair(p)
+                        if b:
+                            bases.append(b)
+                    if bases:
+                        base_sql = ", ".join([f"'{b}'" for b in sorted(set(bases))])
+                        conditions.append(f"`{pair_col}` IN ({base_sql})")
+
+                elif pair_col == "base_asset":
                     bases = []
                     for p in pair_filters_norm:
                         b, _q = self._split_pair(p)
@@ -216,6 +230,7 @@ class DatabaseLoader:
                     if bases:
                         base_sql = ", ".join([f"'{b}'" for b in sorted(set(bases))])
                         conditions.append(f"`base_asset` IN ({base_sql})")
+
                 else:
                     pair_sql = ", ".join([f"'{p}'" for p in sorted(set(pair_filters_norm))])
                     conditions.append(f"`{pair_col}` IN ({pair_sql})")
@@ -247,13 +262,11 @@ class DatabaseLoader:
         table_info = self.tables[table_name]
         where_clause = self.build_where_clause_for_table(table_name, table_info)
 
-        # Build SELECT columns (include extra_columns if any)
         columns = []
         columns += table_info.get('key_columns', [])
         columns += table_info.get('data_columns', [])
         columns += table_info.get('extra_columns', [])
 
-        # remove duplicates while preserving order
         seen = set()
         columns = [c for c in columns if not (c in seen or seen.add(c))]
 
@@ -295,12 +308,11 @@ class DatabaseLoader:
                 if b and q:
                     base_to_pair[b] = f"{b}{q}"
 
-            # --- Normalization: ensure 'symbol' becomes full pair (e.g., BTCUSDT) where needed ---
+            # Normalize symbol to full pair for these tables
             if table_name in (
                 "cg_futures_aggregated_taker_buy_sell_volume_history",
                 "cg_futures_aggregated_ask_bids_history",
             ):
-                # DB provides base_asset, symbol might be BTC not BTCUSDT
                 if "base_asset" in df.columns:
                     if base_to_pair:
                         df["symbol"] = df["base_asset"].astype(str).map(base_to_pair).fillna(
@@ -309,10 +321,26 @@ class DatabaseLoader:
                     else:
                         df["symbol"] = df["base_asset"].astype(str) + "USDT"
 
-                # Also create a unified 'exchange' column for downstream consistency (optional but helpful)
-                if "exchange" not in df.columns:
-                    if "exchange_list" in df.columns:
-                        df["exchange"] = df["exchange_list"].astype(str)
+                if "exchange" not in df.columns and "exchange_list" in df.columns:
+                    df["exchange"] = df["exchange_list"].astype(str)
+
+            # FIX: Open interest aggregated uses symbol=BTC (base)
+            if table_name == "cg_open_interest_aggregated_history":
+                if "symbol" in df.columns:
+                    df["symbol"] = df["symbol"].astype(str).str.upper().str.strip()
+                    if base_to_pair:
+                        df["symbol"] = df["symbol"].map(base_to_pair).fillna(df["symbol"] + "USDT")
+                    else:
+                        df["symbol"] = df["symbol"] + "USDT"
+
+            # FIX: Liquidation aggregated uses symbol=BTC (base)
+            if table_name == "cg_liquidation_aggregated_history":
+                if "symbol" in df.columns:
+                    df["symbol"] = df["symbol"].astype(str).str.upper().str.strip()
+                    if base_to_pair:
+                        df["symbol"] = df["symbol"].map(base_to_pair).fillna(df["symbol"] + "USDT")
+                    else:
+                        df["symbol"] = df["symbol"] + "USDT"
 
             return df
 
