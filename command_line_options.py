@@ -222,8 +222,6 @@ class DataFilter:
     def print_filter_summary(self):
         """Print summary of active filters."""
         print("=== Active Filters ===")
-        if self.mode:
-            print(f"Mode: {self.mode}")
         if self.exchange_filter:
             print(f"Exchange(s): {', '.join(self.exchange_filter)}")
         if self.pair_filter:
