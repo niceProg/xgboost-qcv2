@@ -157,7 +157,7 @@ class DatabaseStorage:
                    val_score: float = None,
                    cv_scores: Optional[List[float]] = None,
                    is_latest: bool = True,
-                   model_version: str = 'futures') -> str:
+                   model_version: str = 'spot') -> str:
         """Store trained model in database."""
         db = self.get_session()
 
@@ -175,7 +175,7 @@ class DatabaseStorage:
             model_storage = ModelStorage(
                 session_id=self.session_id,
                 model_name=model_name,
-                model_version=model_version,  # 'futures' for v2
+                model_version=model_version,  # 'spot' or 'futures'
                 model_file=f"{model_name}_{self.session_id}.pkl",
                 is_latest=is_latest,
                 model_data=model_data
@@ -198,7 +198,7 @@ class DatabaseStorage:
                             session_id: str,
                             summary_file: str,
                             summary_data: Optional[bytes] = None,
-                            model_version: str = 'futures') -> str:
+                            model_version: str = 'spot') -> str:
         """Store dataset summary to xgboost_dataset_summary table."""
         db = self.get_session()
 
@@ -219,7 +219,7 @@ class DatabaseStorage:
                 # Create new dataset summary record
                 dataset_summary = DatasetSummary(
                     session_id=session_id,
-                    model_version=model_version,  # 'futures' for v2
+                    model_version=model_version,  # 'spot' or 'futures'
                     summary_file=summary_file,
                     summary_data=summary_data  # Binary blob data
                 )

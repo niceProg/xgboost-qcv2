@@ -53,10 +53,22 @@ echo "   Database Port: ${DB_PORT}"
 echo "   Database Name: ${DB_NAME}"
 echo ""
 
-# Build and start the API container
-echo "🔨 Building XGBoost API container..."
-docker-compose -f docker-compose.api.yml build
+# Step 1: Stop and remove old container
+echo "🛑 Stopping old XGBoost API container..."
+docker-compose -f docker-compose.api.yml down 2>/dev/null || echo "No existing containers to stop"
+echo "✅ Old containers removed"
 
+# Step 2: Remove old Python bytecode
+echo "🧹 Cleaning Python bytecode cache..."
+find . -name "*.pyc" -delete 2>/dev/null || true
+find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+echo "✅ Bytecode cache cleaned"
+
+# Step 3: Build new image
+echo "🔨 Building XGBoost API container..."
+docker-compose -f docker-compose.api.yml build --no-cache
+
+# Step 4: Start new container
 echo "🚀 Starting XGBoost API container..."
 docker-compose -f docker-compose.api.yml up -d
 
@@ -79,9 +91,12 @@ if docker ps | grep -q "xgboost-api"; then
     echo ""
     echo "🌐 API Endpoints (via domain):"
     echo "   Health Check: https://api.dragonfortune.ai/health"
-    echo "   Latest Model: https://api.dragonfortune.ai/api/v1/latest/model"
-    echo "   Latest Summary: https://api.dragonfortune.ai/api/v1/latest/dataset-summary"
-    echo "   List Sessions: https://api.dragonfortune.ai/api/v1/sessions"
+    echo "   Spot - Latest Model: https://api.dragonfortune.ai/api/v1/spot/latest/model"
+    echo "   Spot - Latest Summary: https://api.dragonfortune.ai/api/v1/spot/latest/dataset-summary"
+    echo "   Spot - List Sessions: https://api.dragonfortune.ai/api/v1/spot/sessions"
+    echo "   Futures - Latest Model: https://api.dragonfortune.ai/api/v1/futures/latest/model"
+    echo "   Futures - Latest Summary: https://api.dragonfortune.ai/api/v1/futures/latest/dataset-summary"
+    echo "   Futures - List Sessions: https://api.dragonfortune.ai/api/v1/futures/sessions"
     echo "   Documentation: https://api.dragonfortune.ai/docs"
     echo ""
     echo "⚠️  Security: API only accessible through domain with SSL"

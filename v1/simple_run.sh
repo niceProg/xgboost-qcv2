@@ -11,16 +11,12 @@ EXCHANGE=${EXCHANGE:-binance}
 PAIR=${PAIR:-BTCUSDT}
 INTERVAL=${INTERVAL:-1h}
 OUTPUT_DIR=${OUTPUT_DIR:-./output_train}
-DEFAULT_DAYS=${DEFAULT_DAYS:-30}  # Default days if no mode specified
 
 echo "Configuration:"
 echo "  Exchange: $EXCHANGE"
 echo "  Pair: $PAIR"
 echo "  Interval: $INTERVAL"
 echo "  Output Directory: $OUTPUT_DIR"
-echo ""
-echo "Note: Mode is optional. Defaults to --days 30 if not specified."
-echo "Available options: --daily, --days N, --time start,end"
 echo ""
 
 # Create output directory
@@ -29,15 +25,16 @@ mkdir -p "$OUTPUT_DIR"
 # Function to run a step
 run_step() {
     local script=$1
-    local mode_flags=$2
-    local step_name=$3
+    local step_name=$2
+    shift 2  # Remove first two arguments, remaining are flags
+    local extra_flags="$@"  # Capture all remaining flags
 
     echo "=========================================="
     echo "Running $step_name..."
-    echo "Command: python $script $mode_flags --exchange $EXCHANGE --pair $PAIR --interval $INTERVAL --output-dir $OUTPUT_DIR"
+    echo "Command: python $script $extra_flags --exchange $EXCHANGE --pair $PAIR --interval $INTERVAL --output-dir $OUTPUT_DIR"
     echo "=========================================="
 
-    if python $script $mode_flags \
+    if python "$script" $extra_flags \
         --exchange "$EXCHANGE" \
         --pair "$PAIR" \
         --interval "$INTERVAL" \
@@ -51,44 +48,31 @@ run_step() {
     fi
 }
 
-# Check mode flags (optional now, default to --days 30 if not specified)
-MODE_FLAG=""
-if [[ "$*" == *"--daily"* ]]; then
-    echo "🔄 Running with --daily mode (current day data only)"
-    MODE_FLAG="--daily"
-elif [[ "$*" == *"--days"* ]]; then
-    # Extract days value from arguments
-    for arg in "$@"; do
-        if [[ "$arg" == "--days"* ]]; then
-            MODE_FLAG="$arg"
-            DAYS_VALUE="${arg#--days}"
-            echo "🔄 Running with --days mode (last ${DAYS_VALUE} days)"
-            break
-        fi
-    done
-elif [[ "$*" == *"--time"* ]]; then
-    # Extract time value from arguments
-    for arg in "$@"; do
-        if [[ "$arg" == "--time"* ]]; then
-            MODE_FLAG="$arg"
-            echo "🔄 Running with --time mode (custom time range)"
-            break
-        fi
-    done
-else
-    # Default: use --days ${DEFAULT_DAYS} if no mode specified
-    echo "🔄 No mode specified, using default: --days ${DEFAULT_DAYS} (last ${DEFAULT_DAYS} days)"
-    echo "   (You can specify: --daily, --days N, or --time start,end)"
-    MODE_FLAG="--days ${DEFAULT_DAYS}"
-fi
+# Parse extra flags (optional: --days N, --time start,end)
+EXTRA_FLAGS=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --days)
+            EXTRA_FLAGS="$EXTRA_FLAGS --days $2"
+            shift 2
+            ;;
+        --time)
+            EXTRA_FLAGS="$EXTRA_FLAGS --time $2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
-# Run each step with the appropriate flags
-run_step "load_database.py" "$MODE_FLAG" "Step 1: Load Database"
-run_step "merge_7_tables.py" "$MODE_FLAG" "Step 2: Merge Tables"
-run_step "feature_engineering.py" "$MODE_FLAG" "Step 3: Feature Engineering"
-run_step "label_builder.py" "$MODE_FLAG" "Step 4: Label Building"
-run_step "xgboost_trainer.py" "$MODE_FLAG" "Step 5: Model Training"
-run_step "model_evaluation_with_leverage.py" "$MODE_FLAG" "Step 6: Model Evaluation"
+# Run each step
+run_step "load_database.py" "Step 1: Load Database" $EXTRA_FLAGS
+run_step "merge_7_tables.py" "Step 2: Merge Tables" $EXTRA_FLAGS
+run_step "feature_engineering.py" "Step 3: Feature Engineering" $EXTRA_FLAGS
+run_step "label_builder.py" "Step 4: Label Building" $EXTRA_FLAGS
+run_step "xgboost_trainer.py" "Step 5: Model Training" $EXTRA_FLAGS
+run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation" $EXTRA_FLAGS
 
 
 echo "=========================================="

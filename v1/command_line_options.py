@@ -19,8 +19,6 @@ Examples:
   python load_database.py --exchange binance --pair BTCUSDT --interval 1h
   python load_database.py --exchange binance,okx --pair BTCUSDT --interval 1h,4h --days 30
   python load_database.py --time 1700000000000,1701000000000
-  python load_database.py --initial --exchange binance --pair BTCUSDT --interval 1h
-  python load_database.py --daily --exchange binance --pair BTCUSDT --interval 1h
         """
     )
 
@@ -67,14 +65,7 @@ Examples:
     parser.add_argument(
         '--days',
         type=int,
-        help='Number of recent days to include (default: 30 if no time filter specified)'
-    )
-
-    # Daily mode
-    parser.add_argument(
-        '--daily',
-        action='store_true',
-        help='Load current day data only (from 00:00 today to now)'
+        help='Number of recent days to include'
     )
 
     # Output options
@@ -104,12 +95,7 @@ class DataFilter:
         self.interval_filter = self._parse_comma_list(args.interval) if args.interval else None
         self.time_range = self._parse_time_range(args.time) if args.time else None
         self.days_filter = args.days
-        self.minutes_filter = args.minutes  # For real-time updates
-        self.daily_mode = args.daily if hasattr(args, 'daily') else False
-
-        # Default to 30 days if no time filter specified
-        if not self.time_range and not self.days_filter and not self.daily_mode and not self.minutes_filter:
-            self.days_filter = 30
+        self.minutes_filter = args.minutes  # New: minutes filter for real-time
 
         # Process minutes filter into time_range
         if self.minutes_filter and not self.time_range:
@@ -118,17 +104,6 @@ class DataFilter:
     def _parse_comma_list(self, comma_str: str) -> List[str]:
         """Parse comma-separated list into list of strings."""
         return [item.strip() for item in comma_str.split(',') if item.strip()]
-
-  
-    def get_mode_time_filter(self):
-        """Get time filter based on mode flags."""
-        if self.daily_mode:
-            # For daily mode, load data from start of day
-            import datetime
-            today_start = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            today_end = datetime.datetime.now()
-            return (int(today_start.timestamp() * 1000), int(today_end.timestamp() * 1000))
-        return None
 
     def _get_minutes_time_range(self, minutes: int) -> tuple:
         """Get time range for the last N minutes for real-time updates."""
@@ -162,17 +137,6 @@ class DataFilter:
         # Quote the column name with backticks to handle reserved keywords
         quoted_col = f"`{time_col}`"
 
-        # Check for daily/initial mode first
-        time_range = self.get_mode_time_filter()
-        if time_range:
-            start_time, end_time = time_range
-            conditions = []
-            if start_time:
-                conditions.append(f"{quoted_col} >= {start_time}")
-            if end_time:
-                conditions.append(f"{quoted_col} <= {end_time}")
-            return " AND ".join(conditions) if conditions else None
-
         if self.days_filter:
             # Calculate timestamp for N days ago
             now = datetime.datetime.now()
@@ -189,6 +153,7 @@ class DataFilter:
                 conditions.append(f"{quoted_col} <= {end_time}")
             return " AND ".join(conditions) if conditions else None
 
+        # No time filter specified - load all available data
         return None
 
     def get_exchange_filter_sql(self, exchange_col: str = 'exchange') -> str:
@@ -228,40 +193,21 @@ class DataFilter:
         """Build complete WHERE clause for a specific table."""
         conditions = []
 
-        # Tables without exchange column (aggregated tables)
-        no_exchange_tables = ['cg_open_interest_aggregated_history', 'cg_liquidation_aggregated_history']
-
-        # Tables with exchange_list column
-        exchange_list_tables = ['cg_futures_aggregated_taker_buy_sell_volume_history',
-                               'cg_futures_aggregated_ask_bids_history']
-
-        # Tables with symbol column (vs pair column)
-        symbol_tables = ['cg_futures_price_history',
-                        'cg_futures_aggregated_taker_buy_sell_volume_history',
-                        'cg_futures_aggregated_ask_bids_history',
-                        'cg_open_interest_aggregated_history',
-                        'cg_liquidation_aggregated_history']
-
         # Determine column names based on table
-        if table_name in no_exchange_tables:
-            exchange_col = None  # No exchange filter for these tables
-        elif table_name in exchange_list_tables:
-            exchange_col = 'exchange_list'
-        else:
-            exchange_col = 'exchange'
-
-        pair_col = 'symbol' if table_name in symbol_tables else 'pair'
+        exchange_col = 'exchange_name' if table_name in ['cg_spot_aggregated_taker_volume_history',
+                                                        'cg_spot_aggregated_ask_bids_history'] else 'exchange'
+        pair_col = 'symbol' if table_name in ['cg_spot_price_history',
+                                             'cg_spot_aggregated_taker_volume_history',
+                                             'cg_spot_aggregated_ask_bids_history'] else 'pair'
 
         # Add conditions
         time_condition = self.get_time_filter_sql()
         if time_condition:
             conditions.append(time_condition)
 
-        # Only add exchange condition if table has exchange column
-        if exchange_col is not None:
-            exchange_condition = self.get_exchange_filter_sql(exchange_col)
-            if exchange_condition:
-                conditions.append(exchange_condition)
+        exchange_condition = self.get_exchange_filter_sql(exchange_col)
+        if exchange_condition:
+            conditions.append(exchange_condition)
 
         pair_condition = self.get_pair_filter_sql(pair_col)
         if pair_condition:
@@ -276,8 +222,6 @@ class DataFilter:
     def print_filter_summary(self):
         """Print summary of active filters."""
         print("=== Active Filters ===")
-        if self.daily_mode:
-            print(f"Mode: daily (current day only)")
         if self.exchange_filter:
             print(f"Exchange(s): {', '.join(self.exchange_filter)}")
         if self.pair_filter:
@@ -299,15 +243,6 @@ class DataFilter:
             if end_time:
                 end_dt = datetime.datetime.fromtimestamp(end_time/1000)
                 print(f"End time: {end_dt} ({end_time})")
-        else:
-            # Show time range based on mode (initial/daily)
-            time_range = self.get_mode_time_filter()
-            if time_range:
-                start_time, end_time = time_range
-                import datetime
-                start_dt = datetime.datetime.fromtimestamp(start_time/1000)
-                end_dt = datetime.datetime.fromtimestamp(end_time/1000)
-                print(f"Time Range: {start_dt} to {end_dt}")
         if self.days_filter:
             print(f"Days: {self.days_filter}")
         if self.minutes_filter:
@@ -347,15 +282,11 @@ if __name__ == "__main__":
 
     # Print WHERE clauses for each table
     tables = [
-        # Core training tables
-        'cg_futures_price_history',
-        'cg_futures_aggregated_taker_buy_sell_volume_history',
-        'cg_futures_aggregated_ask_bids_history',
-        'cg_open_interest_aggregated_history',
-        'cg_liquidation_aggregated_history',
-        # Support/regime filter tables
+        'cg_spot_price_history',
         'cg_funding_rate_history',
         'cg_futures_basis_history',
+        'cg_spot_aggregated_taker_volume_history',
+        'cg_spot_aggregated_ask_bids_history',
         'cg_long_short_global_account_ratio_history',
         'cg_long_short_top_account_ratio_history'
     ]

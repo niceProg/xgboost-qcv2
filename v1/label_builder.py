@@ -342,18 +342,17 @@ Feature Columns:
 
             db_storage = DatabaseStorage()
 
-            # Encode summary_content to bytes for storage
-            summary_bytes = summary_content.encode('utf-8')
+            # Encode summary content to bytes for blob storage
+            summary_data_bytes = summary_content.encode('utf-8')
 
-            # Store dataset summary with model_version and summary_data
+            # Store dataset summary with summary_data as binary blob
             db_storage.store_dataset_summary(
                 session_id=self.session_id,
                 summary_file=summary_file.name,
-                summary_data=summary_bytes,
-                model_version='futures'  # V2 is futures-only
+                summary_data=summary_data_bytes  # Store as binary blob (like model_data)
             )
 
-            logger.info("✅ Dataset summary saved to database using new method")
+            logger.info("✅ Dataset summary saved to database as blob")
 
         except Exception as e:
             logger.error(f"❌ Error saving dataset summary to database: {e}")
