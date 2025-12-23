@@ -232,9 +232,9 @@ def get_dataset_summary_by_version(model_version: str):
         summary_base64 = None
 
         if summary_record.summary_data:
-            # Summary data exists in database - encode to base64
-            summary_base64 = encode_to_base64(summary_record.summary_data.encode('utf-8'))
-            logger.info(f"✅ Retrieved {model_version} dataset summary from database")
+            # Summary data exists in database as blob - encode to base64
+            summary_base64 = encode_to_base64(summary_record.summary_data)
+            logger.info(f"✅ Retrieved {model_version} dataset summary blob from database")
         else:
             # Fallback: Try to read from file (backward compatibility)
             summary_file_path = summary_record.summary_file

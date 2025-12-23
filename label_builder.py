@@ -342,14 +342,17 @@ Feature Columns:
 
             db_storage = DatabaseStorage()
 
-            # Store dataset summary with summary_data content
+            # Encode summary content to bytes for blob storage
+            summary_data_bytes = summary_content.encode('utf-8')
+
+            # Store dataset summary with summary_data as binary blob
             db_storage.store_dataset_summary(
                 session_id=self.session_id,
                 summary_file=summary_file.name,
-                summary_data=summary_content  # Store summary content directly in database
+                summary_data=summary_data_bytes  # Store as binary blob (like model_data)
             )
 
-            logger.info("✅ Dataset summary saved to database with summary_data")
+            logger.info("✅ Dataset summary saved to database as blob")
 
         except Exception as e:
             logger.error(f"❌ Error saving dataset summary to database: {e}")

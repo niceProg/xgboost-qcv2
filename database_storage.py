@@ -37,7 +37,7 @@ class DatasetSummary(Base):
     session_id = Column(String(100), primary_key=True)
     model_version = Column(String(50), default='spot')  # 'spot' or 'futures'
     summary_file = Column(String(500))
-    summary_data = Column(Text)  # Store summary content directly in database
+    summary_data = Column(LONGBLOB)  # Store summary content as binary blob (like model_data)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class ModelStorage(Base):
@@ -197,7 +197,7 @@ class DatabaseStorage:
     def store_dataset_summary(self,
                             session_id: str,
                             summary_file: str,
-                            summary_data: Optional[str] = None,
+                            summary_data: Optional[bytes] = None,
                             model_version: str = 'spot') -> str:
         """Store dataset summary to xgboost_dataset_summary table."""
         db = self.get_session()
@@ -221,7 +221,7 @@ class DatabaseStorage:
                     session_id=session_id,
                     model_version=model_version,  # 'spot' or 'futures'
                     summary_file=summary_file,
-                    summary_data=summary_data
+                    summary_data=summary_data  # Binary blob data
                 )
                 db.add(dataset_summary)
                 logger.info(f"✅ Stored dataset summary for session: {session_id} (version: {model_version})")
