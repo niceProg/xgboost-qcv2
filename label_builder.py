@@ -33,15 +33,10 @@ class LabelBuilder:
         self.data_filter = data_filter
         self.output_dir = Path(output_dir)
         self.label_col = 'target'
-        self.session_id = self._generate_session_id()
         # Store training parameters for database storage
         self.exchange = getattr(data_filter, 'exchange', 'N/A') if hasattr(data_filter, 'exchange') else 'N/A'
         self.pair = getattr(data_filter, 'pair', 'N/A') if hasattr(data_filter, 'pair') else 'N/A'
         self.interval = getattr(data_filter, 'interval', 'N/A') if hasattr(data_filter, 'interval') else 'N/A'
-
-    def _generate_session_id(self) -> str:
-        """Generate unique session ID using timestamp."""
-        return f"label_builder_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     def _format_timestamp(self, ts, jakarta_tz):
         """Format timestamp safely for display."""
@@ -305,7 +300,6 @@ class LabelBuilder:
 
 Training Session Info:
 - Timestamp: {current_time.strftime('%Y-%m-%d %H:%M:%S WIB')}
-- Session ID: {self.session_id}
 - Exchange: {getattr(self, 'exchange', 'N/A')}
 - Pair: {getattr(self, 'pair', 'N/A')}
 - Interval: {getattr(self, 'interval', 'N/A')}
@@ -347,119 +341,16 @@ Feature Columns:
 
             # Store dataset summary with model_version and summary_data
             db_storage.store_dataset_summary(
-                session_id=self.session_id,
                 summary_file=summary_file.name,
                 summary_data=summary_bytes,
                 model_version='futures'  # V2 is futures-only
             )
 
-            logger.info("✅ Dataset summary saved to database using new method")
+            logger.info("Dataset summary saved to database")
 
         except Exception as e:
-            logger.error(f"❌ Error saving dataset summary to database: {e}")
-            # Fallback to old method if new method fails
-            self.save_dataset_summary_to_db(summary_content, summary_file.name)
-
-        # DATABASE STORAGE DISABLED for training tables per client requirement
-        # Client hanya mau xgboost_dataset_summary, bukan xgboost_evaluations, xgboost_features, xgboost_training_sessions
-        logger.info("📝 Database storage for training tables disabled per client requirement")
-
-    def save_dataset_summary_to_db(self, summary_content: str, filename: str):
-        """Save dataset summary to xgboost_dataset_summary table"""
-        try:
-            import pymysql
-            from dotenv import load_dotenv
-
-            load_dotenv()
-
-            conn = pymysql.connect(
-                host=os.getenv('TRADING_DB_HOST'),
-                port=int(os.getenv('TRADING_DB_PORT', 3306)),
-                user=os.getenv('TRADING_DB_USER'),
-                password=os.getenv('TRADING_DB_PASSWORD'),
-                database=os.getenv('TRADING_DB_NAME', 'newera')
-            )
-
-            cursor = conn.cursor()
-
-            # Create xgboost_models table only (per client requirement)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS xgboost_models (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    session_id VARCHAR(100) NOT NULL,
-                    model_name VARCHAR(200) NOT NULL,
-                    model_version VARCHAR(50),
-                    model_file VARCHAR(500),
-                    is_latest BOOLEAN DEFAULT FALSE,
-                    model_data LONGBLOB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_session_id (session_id),
-                    INDEX idx_created_at (created_at),
-                    INDEX idx_model_name (model_name),
-                    INDEX idx_is_latest (is_latest)
-                )
-            """)
-
-            # Create xgboost_dataset_summary table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS xgboost_dataset_summary (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    training_session_id VARCHAR(100),
-                    summary_file VARCHAR(500),
-                    summary_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    exchange VARCHAR(50),
-                    pair VARCHAR(20),
-                    time_interval VARCHAR(20),
-                    total_records INT,
-                    start_time VARCHAR(50),
-                    end_time VARCHAR(50),
-                    INDEX idx_training_session (training_session_id),
-                    INDEX idx_created_at (created_at)
-                )
-            """)
-
-            # Extract training session info from summary
-            exchange = getattr(self, 'exchange', 'N/A')
-            pair = getattr(self, 'pair', 'N/A')
-            interval = getattr(self, 'interval', 'N/A')
-
-            # Get total records from summary content
-            total_records = 0
-            for line in summary_content.split('\n'):
-                if 'Total samples:' in line:
-                    try:
-                        total_records = int(line.split(':')[1].strip().replace(',', ''))
-                    except:
-                        pass
-                    break
-
-            # Insert into database
-            insert_query = """
-            INSERT INTO xgboost_dataset_summary
-            (training_session_id, summary_file, summary_content, exchange, pair, time_interval, total_records)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-
-            cursor.execute(insert_query, (
-                self.session_id,
-                filename,
-                summary_content,
-                exchange,
-                pair,
-                interval,
-                total_records
-            ))
-
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-            logger.info("✅ Dataset summary saved to database")
-
-        except Exception as e:
-            logger.error(f"❌ Error saving dataset summary to database: {e}")
-            logger.info("   Continuing without database storage...")
+            logger.error(f"Error saving dataset summary to database: {e}")
+            # Continue without database storage
 
 
 def main():

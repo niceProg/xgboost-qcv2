@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import pymysql
-from sqlalchemy import create_engine, text, Column, String, DateTime, Integer, Float, Text, LargeBinary, Boolean
+from sqlalchemy import create_engine, text, Column, String, DateTime, Integer, Float, Text, LargeBinary, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.dialects.mysql import MEDIUMBLOB, LONGTEXT, LONGBLOB
@@ -34,23 +34,33 @@ Base = declarative_base()
 class DatasetSummary(Base):
     __tablename__ = 'xgboost_dataset_summary'
 
-    session_id = Column(String(100), primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     model_version = Column(String(50), default='spot')  # 'spot' or 'futures'
     summary_file = Column(String(500))
     summary_data = Column(LONGBLOB)  # Store summary content as binary blob (like model_data)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Composite index for performance: filter by version, order by created_at DESC
+    __table_args__ = (
+        Index('idx_model_version_created', 'model_version', 'created_at'),
+        {'mysql_engine': 'InnoDB'},
+    )
+
 class ModelStorage(Base):
     __tablename__ = 'xgboost_models'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(100), nullable=False, index=True)
     model_name = Column(String(200), nullable=False)
     model_version = Column(String(50), default='spot')  # 'spot' or 'futures'
     model_file = Column(String(500))
-    is_latest = Column(Boolean, default=False)
     model_data = Column(LONGBLOB)  # pickled model
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Composite index for performance: filter by version, order by created_at DESC
+    __table_args__ = (
+        Index('idx_model_version_created', 'model_version', 'created_at'),
+        {'mysql_engine': 'InnoDB'},
+    )
 
   
 class DatabaseStorage:
@@ -77,7 +87,6 @@ class DatabaseStorage:
         self.db_config = db_config
         self.engine = None
         self.SessionLocal = None
-        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         self._initialize_database()
 
@@ -156,36 +165,30 @@ class DatabaseStorage:
                    train_score: float = None,
                    val_score: float = None,
                    cv_scores: Optional[List[float]] = None,
-                   is_latest: bool = True,
-                   model_version: str = 'spot') -> str:
-        """Store trained model in database."""
+                   model_version: str = 'spot') -> int:
+        """Store trained model in database. Returns model ID."""
         db = self.get_session()
 
         try:
             # Serialize model
             model_data = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
 
-            # If this is latest, unset ALL previous latest records globally
-            if is_latest:
-                db.query(ModelStorage).filter(
-                    ModelStorage.is_latest == True
-                ).update({'is_latest': False}, synchronize_session=False)
+            # Generate timestamp for filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            # Store model dengan hanya 8 kolom yang client izinkan
+            # Store model dengan hanya kolom yang client izinkan
             model_storage = ModelStorage(
-                session_id=self.session_id,
                 model_name=model_name,
                 model_version=model_version,  # 'spot' or 'futures'
-                model_file=f"{model_name}_{self.session_id}.pkl",
-                is_latest=is_latest,
+                model_file=f"{model_name}_{timestamp}.pkl",
                 model_data=model_data
             )
 
             db.add(model_storage)
             db.commit()
 
-            logger.info(f"✅ Stored model: {model_name} (version: {model_version})")
-            return self.session_id
+            logger.info(f"✅ Stored model: {model_name} (version: {model_version}, ID: {model_storage.id})")
+            return model_storage.id
 
         except Exception as e:
             db.rollback()
@@ -195,39 +198,24 @@ class DatabaseStorage:
             db.close()
 
     def store_dataset_summary(self,
-                            session_id: str,
                             summary_file: str,
                             summary_data: Optional[bytes] = None,
-                            model_version: str = 'spot') -> str:
-        """Store dataset summary to xgboost_dataset_summary table."""
+                            model_version: str = 'spot') -> int:
+        """Store dataset summary to xgboost_dataset_summary table. Returns summary ID."""
         db = self.get_session()
 
         try:
-            # Check if session already exists (replace/update)
-            existing = db.query(DatasetSummary).filter(
-                DatasetSummary.session_id == session_id
-            ).first()
-
-            if existing:
-                # Update existing record
-                existing.summary_file = summary_file
-                existing.model_version = model_version
-                if summary_data is not None:
-                    existing.summary_data = summary_data
-                logger.info(f"✅ Updated dataset summary for session: {session_id} (version: {model_version})")
-            else:
-                # Create new dataset summary record
-                dataset_summary = DatasetSummary(
-                    session_id=session_id,
-                    model_version=model_version,  # 'spot' or 'futures'
-                    summary_file=summary_file,
-                    summary_data=summary_data  # Binary blob data
-                )
-                db.add(dataset_summary)
-                logger.info(f"✅ Stored dataset summary for session: {session_id} (version: {model_version})")
-
+            # Create new dataset summary record
+            dataset_summary = DatasetSummary(
+                model_version=model_version,  # 'spot' or 'futures'
+                summary_file=summary_file,
+                summary_data=summary_data  # Binary blob data
+            )
+            db.add(dataset_summary)
             db.commit()
-            return session_id
+
+            logger.info(f"✅ Stored dataset summary (version: {model_version}, ID: {dataset_summary.id})")
+            return dataset_summary.id
 
         except Exception as e:
             db.rollback()
@@ -254,22 +242,23 @@ class DatabaseStorage:
 #     """Store evaluation results in database."""
 #     logger.info("❌ Evaluation results storage disabled per client requirement")
 
-    def load_latest_model(self, session_id: Optional[str] = None) -> tuple:
-        """Load latest model from database."""
+    def load_latest_model(self, model_version: str = 'spot') -> tuple:
+        """Load latest model from database using created_at ordering."""
         db = self.get_session()
 
         try:
-            query = db.query(ModelStorage).filter(ModelStorage.is_latest == True)
-            if session_id:
-                query = query.filter(ModelStorage.session_id == session_id)
-
-            model_record = query.order_by(ModelStorage.created_at.desc()).first()
+            # Get latest model by version using created_at DESC
+            model_record = db.query(ModelStorage).filter(
+                ModelStorage.model_version == model_version
+            ).order_by(
+                ModelStorage.created_at.desc()
+            ).first()
 
             if model_record:
                 model = pickle.loads(model_record.model_data)
                 # feature_names tidak disimpan per client requirement
                 feature_names = []
-                return model, feature_names, model_record.session_id
+                return model, feature_names, model_record.id
             else:
                 raise ValueError("No model found in database")
 
