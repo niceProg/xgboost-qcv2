@@ -286,8 +286,10 @@ class DataFilter:
     def print_filter_summary(self):
         """Print summary of active filters."""
         print("=== Active Filters ===")
-        if self.mode:
-            print(f"Mode: {self.mode}")
+        if self.initial_mode:
+            print(f"Mode: initial (from 2024 onwards)")
+        elif self.daily_mode:
+            print(f"Mode: daily (current day only)")
         if self.exchange_filter:
             print(f"Exchange(s): {', '.join(self.exchange_filter)}")
         if self.pair_filter:
