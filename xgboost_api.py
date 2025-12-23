@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 XGBoost Model API for QuantConnect Integration
-Provides endpoints to fetch latest trained models and dataset summaries
+Provides separate endpoints for spot and futures models
 Returns data in base64 format for easy consumption by QuantConnect
 """
 
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="XGBoost Trading Model API",
     description="API for XGBoost trading models and dataset summaries for QuantConnect",
-    version="1.0.0"
+    version="2.0.0"
 )
 
 # Enable CORS - Load from environment
@@ -79,6 +79,7 @@ class ModelResponse(BaseModel):
 class DatasetSummaryResponse(BaseModel):
     success: bool
     session_id: str
+    model_version: str
     summary_file: str
     created_at: str
     summary_data_base64: Optional[str]
@@ -131,19 +132,12 @@ def read_file_as_base64(file_path: str) -> Optional[str]:
         logger.error(f"Failed to read file {file_path}: {e}")
         return None
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint."""
-    return HealthResponse(
-        status="healthy",
-        timestamp=datetime.utcnow().isoformat(),
-        database_connected=db_storage is not None
-    )
+# =========================================================
+# SHARED HELPER FUNCTIONS
+# =========================================================
 
-@app.get("/api/v1/latest/model", response_model=ModelResponse)
-async def get_latest_model():
-    """Get latest trained model with base64 encoding."""
-
+def get_latest_model_by_version(model_version: str):
+    """Helper function to get latest model by version (spot/futures)."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -151,8 +145,23 @@ async def get_latest_model():
         )
 
     try:
-        # Get latest model from database
+        # Get latest model from database with specific version
         model, feature_names, session_id = db_storage.load_latest_model()
+
+        # Verify the model version matches
+        db = db_storage.get_session()
+        model_record = db.query(db_storage.db_model).filter(
+            db_storage.db_model.session_id == session_id,
+            db_storage.db_model.is_latest == True,
+            db_storage.db_model.model_version == model_version
+        ).first()
+
+        if not model_record:
+            db.close()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No {model_version} model found"
+            )
 
         # Serialize model to bytes
         model_bytes = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
@@ -160,20 +169,13 @@ async def get_latest_model():
         # Encode to base64
         model_base64 = encode_to_base64(model_bytes)
 
-        # Get model metadata
-        db = db_storage.get_session()
-        model_record = db.query(db_storage.db_model).filter(
-            db_storage.db_model.session_id == session_id,
-            db_storage.db_model.is_latest == True
-        ).first()
-
         response = ModelResponse(
             success=True,
             session_id=session_id,
-            model_name=model_record.model_name if model_record else 'unknown',
-            model_version=model_record.model_version if model_record else session_id,
-            model_file=model_record.model_file if model_record else 'latest_model.joblib',
-            created_at=model_record.created_at.isoformat() if model_record else None,
+            model_name=model_record.model_name,
+            model_version=model_record.model_version,
+            model_file=model_record.model_file,
+            created_at=model_record.created_at.isoformat(),
             model_data_base64=model_base64,
             feature_names=feature_names,
             content_type='application/octet-stream',
@@ -181,20 +183,20 @@ async def get_latest_model():
         )
 
         db.close()
-        logger.info(f"✅ Retrieved latest model for session: {session_id}")
+        logger.info(f"✅ Retrieved latest {model_version} model for session: {session_id}")
         return response
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Failed to get latest model: {e}")
+        logger.error(f"❌ Failed to get latest {model_version} model: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve model: {str(e)}"
         )
 
-@app.get("/api/v1/latest/dataset-summary", response_model=DatasetSummaryResponse)
-async def get_latest_dataset_summary():
-    """Get latest dataset summary with base64 encoding."""
-
+def get_dataset_summary_by_version(model_version: str):
+    """Helper function to get latest dataset summary by version (spot/futures)."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -202,50 +204,23 @@ async def get_latest_dataset_summary():
         )
 
     try:
-        # Get latest dataset summary from database
+        # Get latest dataset summary from database with specific version
         db = db_storage.get_session()
 
-        # Get the latest dataset summary record directly
-        summary_record = db.query(db_storage.db_dataset_summary).order_by(
+        # Get the latest dataset summary record with specific model_version
+        summary_record = db.query(db_storage.db_dataset_summary).filter(
+            db_storage.db_dataset_summary.model_version == model_version
+        ).order_by(
             db_storage.db_dataset_summary.created_at.desc()
         ).first()
 
         if not summary_record:
-            # If no dataset summary in database, try to find the latest file in the directory
-            summary_dir = Path("./output_train/datasets/summary")
-            if summary_dir.exists():
-                # Get all .txt files and sort by modification time
-                summary_files = list(summary_dir.glob("dataset_summary_*.txt"))
-                if summary_files:
-                    # Get the latest file
-                    latest_file = max(summary_files, key=lambda f: f.stat().st_mtime)
-                    session_id = latest_file.stem.replace("dataset_summary_", "")
-
-                    # Read the file
-                    summary_base64 = read_file_as_base64(str(latest_file))
-
-                    # Get file stats
-                    file_stats = latest_file.stat()
-                    created_at = datetime.fromtimestamp(file_stats.st_mtime).isoformat()
-
-                    response = DatasetSummaryResponse(
-                        success=True,
-                        session_id=session_id,
-                        summary_file=latest_file.name,
-                        created_at=created_at,
-                        summary_data_base64=summary_base64,
-                        content_type='text/plain',
-                        file_extension='.txt'
-                    )
-
-                    db.close()
-                    logger.info(f"✅ Retrieved latest dataset summary from file: {latest_file.name}")
-                    return response
-
-            # No dataset summary found in database or directory
+            # No dataset summary found for this version
+            db.close()
             return DatasetSummaryResponse(
                 success=False,
                 session_id="",
+                model_version=model_version,
                 summary_file="",
                 created_at=datetime.utcnow().isoformat(),
                 summary_data_base64=None,
@@ -253,25 +228,34 @@ async def get_latest_dataset_summary():
                 file_extension='.txt'
             )
 
-        # Try to read the actual summary file
+        # Try to get summary from database first (new behavior)
         summary_base64 = None
-        summary_file_path = summary_record.summary_file
 
-        # Try to find the file in common locations
-        possible_paths = [
-            f"./output_train/datasets/summary/{summary_file_path}",
-            f"./output_train/{summary_file_path}",
-            summary_file_path
-        ]
+        if summary_record.summary_data:
+            # Summary data exists in database - encode to base64
+            summary_base64 = encode_to_base64(summary_record.summary_data.encode('utf-8'))
+            logger.info(f"✅ Retrieved {model_version} dataset summary from database")
+        else:
+            # Fallback: Try to read from file (backward compatibility)
+            summary_file_path = summary_record.summary_file
 
-        for path in possible_paths:
-            if os.path.exists(path):
-                summary_base64 = read_file_as_base64(path)
-                break
+            # Try to find the file in common locations
+            possible_paths = [
+                f"./output_train/datasets/summary/{summary_file_path}",
+                f"./output_train/{summary_file_path}",
+                summary_file_path
+            ]
+
+            for path in possible_paths:
+                if os.path.exists(path):
+                    summary_base64 = read_file_as_base64(path)
+                    logger.info(f"✅ Retrieved {model_version} dataset summary from file: {path}")
+                    break
 
         response = DatasetSummaryResponse(
             success=True,
             session_id=summary_record.session_id,
+            model_version=summary_record.model_version,
             summary_file=summary_record.summary_file,
             created_at=summary_record.created_at.isoformat(),
             summary_data_base64=summary_base64,
@@ -280,22 +264,20 @@ async def get_latest_dataset_summary():
         )
 
         db.close()
-        logger.info(f"✅ Retrieved dataset summary for session: {summary_record.session_id}")
+        logger.info(f"✅ Retrieved {model_version} dataset summary for session: {summary_record.session_id}")
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Failed to get dataset summary: {e}")
+        logger.error(f"❌ Failed to get {model_version} dataset summary: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve dataset summary: {str(e)}"
         )
 
-@app.get("/api/v1/model/{session_id}", response_model=ModelResponse)
-async def get_model_by_session(session_id: str):
-    """Get model by specific session ID."""
-
+def get_model_by_session_version(session_id: str, model_version: str):
+    """Helper function to get model by session ID and version."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -306,25 +288,33 @@ async def get_model_by_session(session_id: str):
         # Load specific model by session_id
         model, feature_names, _ = db_storage.load_latest_model(session_id=session_id)
 
+        # Get model metadata
+        db = db_storage.get_session()
+        model_record = db.query(db_storage.db_model).filter(
+            db_storage.db_model.session_id == session_id,
+            db_storage.db_model.model_version == model_version
+        ).first()
+
+        if not model_record:
+            db.close()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No {model_version} model found with session_id: {session_id}"
+            )
+
         # Serialize model to bytes
         model_bytes = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Encode to base64
         model_base64 = encode_to_base64(model_bytes)
 
-        # Get model metadata
-        db = db_storage.get_session()
-        model_record = db.query(db_storage.db_model).filter(
-            db_storage.db_model.session_id == session_id
-        ).first()
-
         response = ModelResponse(
             success=True,
             session_id=session_id,
-            model_name=model_record.model_name if model_record else 'unknown',
-            model_version=model_record.model_version if model_record else session_id,
-            model_file=model_record.model_file if model_record else f'model_{session_id}.joblib',
-            created_at=model_record.created_at.isoformat() if model_record else None,
+            model_name=model_record.model_name,
+            model_version=model_record.model_version,
+            model_file=model_record.model_file,
+            created_at=model_record.created_at.isoformat(),
             model_data_base64=model_base64,
             feature_names=feature_names,
             content_type='application/octet-stream',
@@ -332,127 +322,20 @@ async def get_model_by_session(session_id: str):
         )
 
         db.close()
-        logger.info(f"✅ Retrieved model for session: {session_id}")
-        return response
-
-    except Exception as e:
-        logger.error(f"❌ Failed to get model for session {session_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve model: {str(e)}"
-        )
-
-@app.get("/api/v1/dataset-summary/{session_id}", response_model=DatasetSummaryResponse)
-async def get_dataset_summary_by_session(session_id: str):
-    """Get dataset summary by specific session ID."""
-
-    if not db_storage:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database not connected"
-        )
-
-    try:
-        # Get dataset summary by session_id
-        db = db_storage.get_session()
-
-        summary_record = db.query(db_storage.db_dataset_summary).filter(
-            db_storage.db_dataset_summary.session_id == session_id
-        ).first()
-
-        if not summary_record:
-            # Try to find the file directly in the directory
-            summary_file_name = f"dataset_summary_{session_id}.txt"
-            summary_file_path = f"./output_train/datasets/summary/{summary_file_name}"
-
-            if os.path.exists(summary_file_path):
-                # Read the file
-                summary_base64 = read_file_as_base64(summary_file_path)
-
-                # Get file stats
-                file_stats = os.stat(summary_file_path)
-                created_at = datetime.fromtimestamp(file_stats.st_mtime).isoformat()
-
-                response = DatasetSummaryResponse(
-                    success=True,
-                    session_id=session_id,
-                    summary_file=summary_file_name,
-                    created_at=created_at,
-                    summary_data_base64=summary_base64,
-                    content_type='text/plain',
-                    file_extension='.txt'
-                )
-
-                db.close()
-                logger.info(f"✅ Retrieved dataset summary from file for session: {session_id}")
-                return response
-
-            # Check if the session exists in models table
-            model_record = db.query(db_storage.db_model).filter(
-                db_storage.db_model.session_id == session_id
-            ).first()
-
-            if model_record:
-                # Session exists but no dataset summary
-                return DatasetSummaryResponse(
-                    success=False,
-                    session_id=session_id,
-                    summary_file="",
-                    created_at=model_record.created_at.isoformat(),
-                    summary_data_base64=None,
-                    content_type='text/plain',
-                    file_extension='.txt'
-                )
-            else:
-                # Session doesn't exist at all
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"No training session found with ID: {session_id}"
-                )
-
-        # Try to read the actual summary file
-        summary_base64 = None
-        summary_file_path = summary_record.summary_file
-
-        # Try to find the file in common locations
-        possible_paths = [
-            f"./output_train/datasets/summary/{summary_file_path}",
-            f"./output_train/{summary_file_path}",
-            summary_file_path
-        ]
-
-        for path in possible_paths:
-            if os.path.exists(path):
-                summary_base64 = read_file_as_base64(path)
-                break
-
-        response = DatasetSummaryResponse(
-            success=True,
-            session_id=session_id,
-            summary_file=summary_record.summary_file,
-            created_at=summary_record.created_at.isoformat(),
-            summary_data_base64=summary_base64,
-            content_type='text/plain',
-            file_extension='.txt'
-        )
-
-        db.close()
-        logger.info(f"✅ Retrieved dataset summary for session: {session_id}")
+        logger.info(f"✅ Retrieved {model_version} model for session: {session_id}")
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Failed to get dataset summary for session {session_id}: {e}")
+        logger.error(f"❌ Failed to get {model_version} model for session {session_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve dataset summary: {str(e)}"
+            detail=f"Failed to retrieve model: {str(e)}"
         )
 
-@app.get("/api/v1/sessions", response_model=SessionsResponse)
-async def list_sessions():
-    """List all available training sessions."""
-
+def get_sessions_by_version(model_version: str):
+    """Helper function to list sessions by version."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -462,8 +345,10 @@ async def list_sessions():
     try:
         db = db_storage.get_session()
 
-        # Get all models with their session info
-        models = db.query(db_storage.db_model).order_by(
+        # Get all models with specific version
+        models = db.query(db_storage.db_model).filter(
+            db_storage.db_model.model_version == model_version
+        ).order_by(
             db_storage.db_model.created_at.desc()
         ).all()
 
@@ -471,7 +356,8 @@ async def list_sessions():
         for model in models:
             # Check if dataset summary exists
             summary_exists = db.query(db_storage.db_dataset_summary).filter(
-                db_storage.db_dataset_summary.session_id == model.session_id
+                db_storage.db_dataset_summary.session_id == model.session_id,
+                db_storage.db_dataset_summary.model_version == model_version
             ).first() is not None
 
             sessions.append(SessionInfo(
@@ -492,16 +378,14 @@ async def list_sessions():
         )
 
     except Exception as e:
-        logger.error(f"❌ Failed to list sessions: {e}")
+        logger.error(f"❌ Failed to list {model_version} sessions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve sessions: {str(e)}"
         )
 
-@app.post("/api/v1/model", response_model=ModelInsertResponse)
-async def insert_model(model_request: ModelInsertRequest):
-    """Insert a new trained model to the database."""
-
+def insert_model_by_version(model_request: ModelInsertRequest, model_version: str):
+    """Helper function to insert model with specific version."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -518,7 +402,6 @@ async def insert_model(model_request: ModelInsertRequest):
         db_storage.session_id = session_id
 
         # Store the model using the store_model method
-        # The method will automatically handle is_latest flag - setting all previous latest to False
         returned_session_id = db_storage.store_model(
             model=model,
             model_name=model_request.model_name,
@@ -527,7 +410,8 @@ async def insert_model(model_request: ModelInsertRequest):
             train_score=model_request.train_score,
             val_score=model_request.val_score,
             cv_scores=model_request.cv_scores,
-            is_latest=model_request.is_latest
+            is_latest=model_request.is_latest,
+            model_version=model_version  # 'spot' or 'futures'
         )
 
         # Get the inserted model record ID
@@ -539,23 +423,97 @@ async def insert_model(model_request: ModelInsertRequest):
 
         db.close()
 
-        logger.info(f"✅ Successfully inserted model: {model_request.model_name} (Session: {returned_session_id})")
+        logger.info(f"✅ Successfully inserted {model_version} model: {model_request.model_name} (Session: {returned_session_id})")
 
         return ModelInsertResponse(
             success=True,
-            message="Model inserted successfully",
+            message=f"Model inserted successfully (version: {model_version})",
             session_id=returned_session_id,
             model_id=model_id
         )
 
     except Exception as e:
-        logger.error(f"❌ Failed to insert model: {e}")
+        logger.error(f"❌ Failed to insert {model_version} model: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to insert model: {str(e)}"
         )
 
-# Database model references (to avoid circular imports)
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """Health check endpoint."""
+    return HealthResponse(
+        status="healthy",
+        timestamp=datetime.utcnow().isoformat(),
+        database_connected=db_storage is not None
+    )
+
+# =========================================================
+# SPOT ENDPOINTS (/api/v1/spot/*)
+# =========================================================
+
+@app.get("/api/v1/spot/latest/model", response_model=ModelResponse)
+async def get_spot_latest_model():
+    """Get latest spot trained model with base64 encoding."""
+    return get_latest_model_by_version('spot')
+
+@app.get("/api/v1/spot/latest/dataset-summary", response_model=DatasetSummaryResponse)
+async def get_spot_latest_dataset_summary():
+    """Get latest spot dataset summary with base64 encoding."""
+    return get_dataset_summary_by_version('spot')
+
+@app.get("/api/v1/spot/model/{session_id}", response_model=ModelResponse)
+async def get_spot_model_by_session(session_id: str):
+    """Get spot model by specific session ID."""
+    return get_model_by_session_version(session_id, 'spot')
+
+@app.get("/api/v1/spot/sessions", response_model=SessionsResponse)
+async def list_spot_sessions():
+    """List all available spot training sessions."""
+    return get_sessions_by_version('spot')
+
+@app.post("/api/v1/spot/model", response_model=ModelInsertResponse)
+async def insert_spot_model(model_request: ModelInsertRequest):
+    """Insert a new spot trained model to the database."""
+    return insert_model_by_version(model_request, 'spot')
+
+# =========================================================
+# FUTURES ENDPOINTS (/api/v1/futures/*)
+# =========================================================
+
+@app.get("/api/v1/futures/latest/model", response_model=ModelResponse)
+async def get_futures_latest_model():
+    """Get latest futures trained model with base64 encoding."""
+    return get_latest_model_by_version('futures')
+
+@app.get("/api/v1/futures/latest/dataset-summary", response_model=DatasetSummaryResponse)
+async def get_futures_latest_dataset_summary():
+    """Get latest futures dataset summary with base64 encoding."""
+    return get_dataset_summary_by_version('futures')
+
+@app.get("/api/v1/futures/model/{session_id}", response_model=ModelResponse)
+async def get_futures_model_by_session(session_id: str):
+    """Get futures model by specific session ID."""
+    return get_model_by_session_version(session_id, 'futures')
+
+@app.get("/api/v1/futures/sessions", response_model=SessionsResponse)
+async def list_futures_sessions():
+    """List all available futures training sessions."""
+    return get_sessions_by_version('futures')
+
+@app.post("/api/v1/futures/model", response_model=ModelInsertResponse)
+async def insert_futures_model(model_request: ModelInsertRequest):
+    """Insert a new futures trained model to the database."""
+    return insert_model_by_version(model_request, 'futures')
+
+# =========================================================
+# DATABASE MODEL REFERENCES
+# =========================================================
+
 def init_db_models():
     """Initialize database model references."""
     if db_storage:
@@ -566,6 +524,10 @@ def init_db_models():
 # Initialize database models
 init_db_models()
 
+# =========================================================
+# MAIN
+# =========================================================
+
 if __name__ == "__main__":
     import uvicorn
 
@@ -575,12 +537,21 @@ if __name__ == "__main__":
     logger.info(f"🚀 Starting XGBoost FastAPI server on {host}:{port}")
     logger.info("📊 Available endpoints:")
     logger.info("   GET /health - Health check")
-    logger.info("   GET /api/v1/latest/model - Get latest model")
-    logger.info("   GET /api/v1/latest/dataset-summary - Get latest dataset summary")
-    logger.info("   GET /api/v1/model/<session_id> - Get model by session")
-    logger.info("   GET /api/v1/dataset-summary/<session_id> - Get dataset summary by session")
-    logger.info("   GET /api/v1/sessions - List all sessions")
-    logger.info("   POST /api/v1/model - Insert new model (with is_latest handling)")
+    logger.info("")
+    logger.info("   SPOT Endpoints:")
+    logger.info("   GET /api/v1/spot/latest/model - Get latest spot model")
+    logger.info("   GET /api/v1/spot/latest/dataset-summary - Get latest spot dataset summary")
+    logger.info("   GET /api/v1/spot/model/<session_id> - Get spot model by session")
+    logger.info("   GET /api/v1/spot/sessions - List all spot sessions")
+    logger.info("   POST /api/v1/spot/model - Insert new spot model")
+    logger.info("")
+    logger.info("   FUTURES Endpoints:")
+    logger.info("   GET /api/v1/futures/latest/model - Get latest futures model")
+    logger.info("   GET /api/v1/futures/latest/dataset-summary - Get latest futures dataset summary")
+    logger.info("   GET /api/v1/futures/model/<session_id> - Get futures model by session")
+    logger.info("   GET /api/v1/futures/sessions - List all futures sessions")
+    logger.info("   POST /api/v1/futures/model - Insert new futures model")
+    logger.info("")
     logger.info("📖 API docs available at: http://localhost:5000/docs")
 
     uvicorn.run(app, host=host, port=port)

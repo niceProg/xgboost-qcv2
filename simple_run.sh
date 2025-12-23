@@ -46,13 +46,36 @@ run_step() {
     fi
 }
 
-# Run each step
-run_step "load_database.py" "Step 1: Load Database"
-run_step "merge_7_tables.py" "Step 2: Merge Tables"
-run_step "feature_engineering.py" "Step 3: Feature Engineering"
-run_step "label_builder.py" "Step 4: Label Building"
-run_step "xgboost_trainer.py" "Step 5: Model Training"
-run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation"
+# Check if --initial flag is provided
+if [[ "$*" == *"--initial"* ]]; then
+    echo "🔄 Running with --initial mode (historical data from 2024)"
+    INITIAL_FLAG="--initial"
+elif [[ "$*" == *"--daily"* ]]; then
+    echo "🔄 Running with --daily mode (current day data only)"
+    DAILY_FLAG="--daily"
+else
+    echo "⚠️  No mode specified. Please specify either:"
+    echo "   --initial  (for historical data from 2024)"
+    echo "   --daily    (for current day data only)"
+    echo "   --days N   (for last N days)"
+    echo "   --time start,end (for custom time range)"
+    echo ""
+    echo "Example usage:"
+    echo "  $0 --initial"
+    echo "  $0 --daily"
+    echo "  $0 --days 30"
+    echo "  $0 --time 1609459200000,1640995199000"
+    echo ""
+    exit 1
+fi
+
+# Run each step with the appropriate flags
+run_step "load_database.py $INITIAL_FLAG $DAILY_FLAG" "Step 1: Load Database"
+run_step "merge_7_tables.py $INITIAL_FLAG $DAILY_FLAG" "Step 2: Merge Tables"
+run_step "feature_engineering.py $INITIAL_FLAG $DAILY_FLAG" "Step 3: Feature Engineering"
+run_step "label_builder.py $INITIAL_FLAG $DAILY_FLAG" "Step 4: Label Building"
+run_step "xgboost_trainer.py $INITIAL_FLAG $DAILY_FLAG" "Step 5: Model Training"
+run_step "model_evaluation_with_leverage.py $INITIAL_FLAG $DAILY_FLAG" "Step 6: Model Evaluation"
 
 
 echo "=========================================="

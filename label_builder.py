@@ -342,13 +342,14 @@ Feature Columns:
 
             db_storage = DatabaseStorage()
 
-            # Store dataset summary (hanya 3 kolom dengan session_id)
+            # Store dataset summary with summary_data content
             db_storage.store_dataset_summary(
                 session_id=self.session_id,
-                summary_file=summary_file.name
+                summary_file=summary_file.name,
+                summary_data=summary_content  # Store summary content directly in database
             )
 
-            logger.info("✅ Dataset summary saved to database using new method")
+            logger.info("✅ Dataset summary saved to database with summary_data")
 
         except Exception as e:
             logger.error(f"❌ Error saving dataset summary to database: {e}")

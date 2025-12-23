@@ -35,7 +35,9 @@ class DatasetSummary(Base):
     __tablename__ = 'xgboost_dataset_summary'
 
     session_id = Column(String(100), primary_key=True)
+    model_version = Column(String(50), default='spot')  # 'spot' or 'futures'
     summary_file = Column(String(500))
+    summary_data = Column(Text)  # Store summary content directly in database
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class ModelStorage(Base):
@@ -44,7 +46,7 @@ class ModelStorage(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False, index=True)
     model_name = Column(String(200), nullable=False)
-    model_version = Column(String(50))
+    model_version = Column(String(50), default='spot')  # 'spot' or 'futures'
     model_file = Column(String(500))
     is_latest = Column(Boolean, default=False)
     model_data = Column(LONGBLOB)  # pickled model
@@ -154,7 +156,8 @@ class DatabaseStorage:
                    train_score: float = None,
                    val_score: float = None,
                    cv_scores: Optional[List[float]] = None,
-                   is_latest: bool = True) -> str:
+                   is_latest: bool = True,
+                   model_version: str = 'spot') -> str:
         """Store trained model in database."""
         db = self.get_session()
 
@@ -172,7 +175,7 @@ class DatabaseStorage:
             model_storage = ModelStorage(
                 session_id=self.session_id,
                 model_name=model_name,
-                model_version=self.session_id,
+                model_version=model_version,  # 'spot' or 'futures'
                 model_file=f"{model_name}_{self.session_id}.pkl",
                 is_latest=is_latest,
                 model_data=model_data
@@ -181,7 +184,7 @@ class DatabaseStorage:
             db.add(model_storage)
             db.commit()
 
-            logger.info(f"✅ Stored model: {model_name}")
+            logger.info(f"✅ Stored model: {model_name} (version: {model_version})")
             return self.session_id
 
         except Exception as e:
@@ -193,7 +196,9 @@ class DatabaseStorage:
 
     def store_dataset_summary(self,
                             session_id: str,
-                            summary_file: str) -> str:
+                            summary_file: str,
+                            summary_data: Optional[str] = None,
+                            model_version: str = 'spot') -> str:
         """Store dataset summary to xgboost_dataset_summary table."""
         db = self.get_session()
 
@@ -206,15 +211,20 @@ class DatabaseStorage:
             if existing:
                 # Update existing record
                 existing.summary_file = summary_file
-                logger.info(f"✅ Updated dataset summary for session: {session_id}")
+                existing.model_version = model_version
+                if summary_data is not None:
+                    existing.summary_data = summary_data
+                logger.info(f"✅ Updated dataset summary for session: {session_id} (version: {model_version})")
             else:
                 # Create new dataset summary record
                 dataset_summary = DatasetSummary(
                     session_id=session_id,
-                    summary_file=summary_file
+                    model_version=model_version,  # 'spot' or 'futures'
+                    summary_file=summary_file,
+                    summary_data=summary_data
                 )
                 db.add(dataset_summary)
-                logger.info(f"✅ Stored dataset summary for session: {session_id}")
+                logger.info(f"✅ Stored dataset summary for session: {session_id} (version: {model_version})")
 
             db.commit()
             return session_id

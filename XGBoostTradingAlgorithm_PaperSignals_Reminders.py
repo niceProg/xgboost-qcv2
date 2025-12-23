@@ -37,6 +37,9 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.api_timeout = 30  # seconds
         self.api_retry_count = 3
 
+        # Model version: 'spot' or 'futures'
+        self.model_version = "spot"  # Change to "futures" for futures trading
+
         # Skip API calls in backtest mode to prevent network errors
         self.use_api = self.LiveMode  # Only use API in live/paper trading
 
@@ -623,7 +626,7 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         """Load dataset summary from XGBoost API."""
         for attempt in range(self.api_retry_count):
             try:
-                url = f"{self.api_base_url}/api/v1/latest/dataset-summary"
+                url = f"{self.api_base_url}/api/v1/{self.model_version}/latest/dataset-summary"
                 self.Debug(f"Fetching dataset summary from: {url}")
 
                 response = requests.get(url, timeout=self.api_timeout)
@@ -694,7 +697,7 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         """Load XGBoost model from API."""
         for attempt in range(self.api_retry_count):
             try:
-                url = f"{self.api_base_url}/api/v1/latest/model"
+                url = f"{self.api_base_url}/api/v1/{self.model_version}/latest/model"
                 self.Debug(f"Fetching model from: {url}")
 
                 response = requests.get(url, timeout=self.api_timeout)
