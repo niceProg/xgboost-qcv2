@@ -96,8 +96,8 @@ class RealtimeDatabaseMonitor:
             },
             'cg_futures_aggregated_ask_bids_history': {
                 'time_col': 'time',
-                'key_cols': ['time', 'exchange', 'symbol', 'interval'],
-                'exchange_col': 'exchange',
+                'key_cols': ['time', 'symbol', 'interval'],  # No exchange column
+                'exchange_col': None,  # No exchange column in this table
                 'min_new_records': 10,
                 'priority': 'HIGH',
                 'max_check_interval': 60,

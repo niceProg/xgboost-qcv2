@@ -229,7 +229,9 @@ class DataFilter:
         conditions = []
 
         # Tables without exchange column (aggregated tables)
-        no_exchange_tables = ['cg_open_interest_aggregated_history', 'cg_liquidation_aggregated_history']
+        no_exchange_tables = ['cg_open_interest_aggregated_history',
+                              'cg_liquidation_aggregated_history',
+                              'cg_futures_aggregated_ask_bids_history']
 
         # Tables with symbol column (vs pair column)
         symbol_tables = ['cg_futures_price_history',

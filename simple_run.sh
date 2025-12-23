@@ -18,22 +18,6 @@ echo "  Pair: $PAIR"
 echo "  Interval: $INTERVAL"
 echo "  Output Directory: $OUTPUT_DIR"
 echo ""
-echo "Usage Options:"
-echo "1. Default (all data in database):"
-echo "   ./simple_run.sh"
-echo ""
-echo "2. Filter by exchange, pair, interval:"
-echo "   EXCHANGE=okx PAIR=ETHUSDT INTERVAL=4h ./simple_run.sh"
-echo ""
-echo "3. Load 30 hari terakhir:"
-echo "   ./simple_run.sh --days 30"
-echo ""
-echo "4. Load data dalam time range tertentu (milliseconds timestamp):"
-echo "   ./simple_run.sh --time 1700000000000,1701000000000"
-echo ""
-echo "5. Combine semua:"
-echo "   EXCHANGE=binance PAIR=ETHUSDT INTERVAL=1h ./simple_run.sh --days 60"
-echo ""
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
@@ -70,12 +54,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --days)
             EXTRA_FLAGS="$EXTRA_FLAGS --days $2"
-            echo "🔄 Running with --days mode (last $2 days)"
             shift 2
             ;;
         --time)
             EXTRA_FLAGS="$EXTRA_FLAGS --time $2"
-            echo "🔄 Running with --time mode (custom time range in milliseconds)"
             shift 2
             ;;
         *)
@@ -83,10 +65,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-if [[ -z "$EXTRA_FLAGS" ]]; then
-    echo "🔄 No time filter specified, loading all data from database"
-fi
 
 # Run each step
 run_step "load_database.py" "Step 1: Load Database" $EXTRA_FLAGS

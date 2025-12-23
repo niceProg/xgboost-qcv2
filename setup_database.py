@@ -53,7 +53,7 @@ class DatabaseSetup:
                 'name': 'cg_futures_aggregated_ask_bids_history',
                 'time_col': 'time',
                 'symbol_col': 'symbol',
-                'key_cols': ['time', 'exchange', 'symbol', 'interval']
+                'key_cols': ['time', 'symbol', 'interval']  # No exchange column
             },
             {
                 'name': 'cg_open_interest_aggregated_history',

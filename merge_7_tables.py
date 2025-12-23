@@ -63,7 +63,7 @@ class TableMerger:
             },
             'cg_futures_aggregated_ask_bids_history': {
                 'prefix': 'orderbook',
-                'key_cols': ['time', 'exchange', 'symbol', 'interval'],
+                'key_cols': ['time', 'symbol', 'interval'],  # No exchange column
                 'data_cols': ['aggregated_bids_usd', 'aggregated_bids_quantity',
                              'aggregated_asks_usd', 'aggregated_asks_quantity'],
                 'required': False

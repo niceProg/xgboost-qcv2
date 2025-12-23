@@ -89,9 +89,9 @@ class DatabaseLoader:
             },
             'cg_futures_aggregated_ask_bids_history': {
                 'time_col': 'time',
-                'exchange_col': 'exchange',
+                'exchange_col': None,  # No exchange column in this table
                 'pair_col': 'symbol',
-                'key_columns': ['time', 'exchange', 'symbol', 'interval'],
+                'key_columns': ['time', 'symbol', 'interval'],
                 'data_columns': ['aggregated_bids_usd', 'aggregated_bids_quantity',
                                'aggregated_asks_usd', 'aggregated_asks_quantity']
             },
