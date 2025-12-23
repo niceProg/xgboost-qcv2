@@ -219,7 +219,9 @@ class TableMerger:
         table_std['time'] = pd.to_datetime(table_std['time'], unit='ms')
 
         # Tables without exchange column (aggregated tables)
-        no_exchange_tables = ['cg_open_interest_aggregated_history', 'cg_liquidation_aggregated_history']
+        no_exchange_tables = ['cg_open_interest_aggregated_history',
+                              'cg_liquidation_aggregated_history',
+                              'cg_futures_aggregated_ask_bids_history']
 
         # Remove duplicates and define merge keys based on table type
         if table_name in no_exchange_tables:

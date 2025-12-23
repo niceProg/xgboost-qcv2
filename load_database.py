@@ -95,17 +95,18 @@ class DatabaseLoader:
                 'extra_columns': ['symbol', 'base_asset', 'unit'],
             },
 
-            # In DB: exchange_list, symbol (BTC), base_asset (BTC), interval, range_percent
+            # In DB: NO exchange column, symbol (BTC), base_asset (BTC), interval, range_percent
             'cg_futures_aggregated_ask_bids_history': {
                 'time_col': 'time',
-                'exchange_col': 'exchange_list',
-                'pair_col': 'base_asset',
-                'key_columns': ['time', 'exchange_list', 'interval', 'range_percent'],
+                'exchange_col': None,  # No exchange column in this table
+                'pair_col': 'symbol',  # symbol contains base asset (BTC)
+                'key_columns': ['time', 'symbol', 'interval'],
                 'data_columns': [
                     'aggregated_bids_usd', 'aggregated_bids_quantity',
                     'aggregated_asks_usd', 'aggregated_asks_quantity'
                 ],
-                'extra_columns': ['symbol', 'base_asset'],
+                'extra_columns': ['base_asset'],
+                'pair_is_base_asset': True,  # symbol is base asset, normalize to full pair
             },
 
             # In DB: symbol is base asset (BTC), no exchange column
@@ -308,11 +309,8 @@ class DatabaseLoader:
                 if b and q:
                     base_to_pair[b] = f"{b}{q}"
 
-            # Normalize symbol to full pair for these tables
-            if table_name in (
-                "cg_futures_aggregated_taker_buy_sell_volume_history",
-                "cg_futures_aggregated_ask_bids_history",
-            ):
+            # Normalize symbol to full pair for taker table (uses base_asset column)
+            if table_name == "cg_futures_aggregated_taker_buy_sell_volume_history":
                 if "base_asset" in df.columns:
                     if base_to_pair:
                         df["symbol"] = df["base_asset"].astype(str).map(base_to_pair).fillna(
@@ -320,9 +318,19 @@ class DatabaseLoader:
                         )
                     else:
                         df["symbol"] = df["base_asset"].astype(str) + "USDT"
+                    # Drop base_asset column after normalization
+                    df = df.drop(columns=['base_asset'], errors='ignore')
 
-                if "exchange" not in df.columns and "exchange_list" in df.columns:
-                    df["exchange"] = df["exchange_list"].astype(str)
+            # FIX: Ask/bids aggregated uses symbol=BTC (base), no exchange column
+            if table_name == "cg_futures_aggregated_ask_bids_history":
+                if "symbol" in df.columns:
+                    df["symbol"] = df["symbol"].astype(str).str.upper().str.strip()
+                    if base_to_pair:
+                        df["symbol"] = df["symbol"].map(base_to_pair).fillna(df["symbol"] + "USDT")
+                    else:
+                        df["symbol"] = df["symbol"] + "USDT"
+                # Drop base_asset column if exists
+                df = df.drop(columns=['base_asset'], errors='ignore')
 
             # FIX: Open interest aggregated uses symbol=BTC (base)
             if table_name == "cg_open_interest_aggregated_history":
