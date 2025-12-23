@@ -320,6 +320,8 @@ class DatabaseLoader:
                         df["symbol"] = df["base_asset"].astype(str) + "USDT"
                     # Drop base_asset column after normalization
                     df = df.drop(columns=['base_asset'], errors='ignore')
+                # Drop unit column (contains 'coin' string, not needed for training)
+                df = df.drop(columns=['unit'], errors='ignore')
 
             # FIX: Ask/bids aggregated uses symbol=BTC (base), no exchange column
             if table_name == "cg_futures_aggregated_ask_bids_history":
@@ -340,6 +342,8 @@ class DatabaseLoader:
                         df["symbol"] = df["symbol"].map(base_to_pair).fillna(df["symbol"] + "USDT")
                     else:
                         df["symbol"] = df["symbol"] + "USDT"
+                # Drop unit column (contains 'coin' string, not needed for training)
+                df = df.drop(columns=['unit'], errors='ignore')
 
             # FIX: Liquidation aggregated uses symbol=BTC (base)
             if table_name == "cg_liquidation_aggregated_history":
