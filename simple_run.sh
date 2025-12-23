@@ -26,13 +26,15 @@ mkdir -p "$OUTPUT_DIR"
 run_step() {
     local script=$1
     local step_name=$2
+    shift 2  # Remove first two arguments, remaining are flags
+    local extra_flags="$@"  # Capture all remaining flags
 
     echo "=========================================="
     echo "Running $step_name..."
-    echo "Command: python $script --exchange $EXCHANGE --pair $PAIR --interval $INTERVAL"
+    echo "Command: python $script $extra_flags --exchange $EXCHANGE --pair $PAIR --interval $INTERVAL --output-dir $OUTPUT_DIR"
     echo "=========================================="
 
-    if python "$script" \
+    if python "$script" $extra_flags \
         --exchange "$EXCHANGE" \
         --pair "$PAIR" \
         --interval "$INTERVAL" \
@@ -46,14 +48,38 @@ run_step() {
     fi
 }
 
-# Check if --initial flag is provided
+# Check flags and set mode
+EXTRA_FLAGS=""
+MODE_SPECIFIED=""
+
+# Check for mode flags
 if [[ "$*" == *"--initial"* ]]; then
     echo "🔄 Running with --initial mode (historical data from 2024)"
-    INITIAL_FLAG="--initial"
+    EXTRA_FLAGS="--initial"
+    MODE_SPECIFIED="yes"
 elif [[ "$*" == *"--daily"* ]]; then
     echo "🔄 Running with --daily mode (current day data only)"
-    DAILY_FLAG="--daily"
-else
+    EXTRA_FLAGS="--daily"
+    MODE_SPECIFIED="yes"
+elif [[ "$*" == *"--days"* ]]; then
+    # Extract days value
+    DAYS_VALUE=$(echo "$@" | grep -o -- '--days [0-9]*' | awk '{print $2}')
+    if [ -n "$DAYS_VALUE" ]; then
+        echo "🔄 Running with --days $DAYS_VALUE mode"
+        EXTRA_FLAGS="--days $DAYS_VALUE"
+        MODE_SPECIFIED="yes"
+    fi
+elif [[ "$*" == *"--time"* ]]; then
+    # Extract time value
+    TIME_VALUE=$(echo "$@" | grep -o -- '--time [^ ]*' | awk '{print $2}')
+    if [ -n "$TIME_VALUE" ]; then
+        echo "🔄 Running with --time $TIME_VALUE mode"
+        EXTRA_FLAGS="--time $TIME_VALUE"
+        MODE_SPECIFIED="yes"
+    fi
+fi
+
+if [ "$MODE_SPECIFIED" != "yes" ]; then
     echo "⚠️  No mode specified. Please specify either:"
     echo "   --initial  (for historical data from 2024)"
     echo "   --daily    (for current day data only)"
@@ -70,12 +96,12 @@ else
 fi
 
 # Run each step with the appropriate flags
-run_step "load_database.py $INITIAL_FLAG $DAILY_FLAG" "Step 1: Load Database"
-run_step "merge_7_tables.py $INITIAL_FLAG $DAILY_FLAG" "Step 2: Merge Tables"
-run_step "feature_engineering.py $INITIAL_FLAG $DAILY_FLAG" "Step 3: Feature Engineering"
-run_step "label_builder.py $INITIAL_FLAG $DAILY_FLAG" "Step 4: Label Building"
-run_step "xgboost_trainer.py $INITIAL_FLAG $DAILY_FLAG" "Step 5: Model Training"
-run_step "model_evaluation_with_leverage.py $INITIAL_FLAG $DAILY_FLAG" "Step 6: Model Evaluation"
+run_step "load_database.py" "Step 1: Load Database" $EXTRA_FLAGS
+run_step "merge_7_tables.py" "Step 2: Merge Tables" $EXTRA_FLAGS
+run_step "feature_engineering.py" "Step 3: Feature Engineering" $EXTRA_FLAGS
+run_step "label_builder.py" "Step 4: Label Building" $EXTRA_FLAGS
+run_step "xgboost_trainer.py" "Step 5: Model Training" $EXTRA_FLAGS
+run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation" $EXTRA_FLAGS
 
 
 echo "=========================================="
