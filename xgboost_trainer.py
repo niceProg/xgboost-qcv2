@@ -334,8 +334,7 @@ class XGBoostTrainer:
                 hyperparams=results['parameters'],
                 train_score=results['metrics'].get('train_auc', 0),
                 val_score=results['metrics'].get('val_auc', 0),
-                cv_scores=results['cross_validation'].get('cv_scores', []),
-                is_latest=True
+                cv_scores=results['cross_validation'].get('cv_scores', [])
             )
 
             logger.info("Model saved to database")
