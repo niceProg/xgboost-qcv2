@@ -33,15 +33,10 @@ class LabelBuilder:
         self.data_filter = data_filter
         self.output_dir = Path(output_dir)
         self.label_col = 'target'
-        self.session_id = self._generate_session_id()
         # Store training parameters for database storage
         self.exchange = getattr(data_filter, 'exchange', 'N/A') if hasattr(data_filter, 'exchange') else 'N/A'
         self.pair = getattr(data_filter, 'pair', 'N/A') if hasattr(data_filter, 'pair') else 'N/A'
         self.interval = getattr(data_filter, 'interval', 'N/A') if hasattr(data_filter, 'interval') else 'N/A'
-
-    def _generate_session_id(self) -> str:
-        """Generate unique session ID using timestamp."""
-        return f"label_builder_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     def _format_timestamp(self, ts, jakarta_tz):
         """Format timestamp safely for display."""
@@ -305,7 +300,6 @@ class LabelBuilder:
 
 Training Session Info:
 - Timestamp: {current_time.strftime('%Y-%m-%d %H:%M:%S WIB')}
-- Session ID: {self.session_id}
 - Exchange: {getattr(self, 'exchange', 'N/A')}
 - Pair: {getattr(self, 'pair', 'N/A')}
 - Interval: {getattr(self, 'interval', 'N/A')}
@@ -347,7 +341,6 @@ Feature Columns:
 
             # Store dataset summary with summary_data as binary blob
             db_storage.store_dataset_summary(
-                session_id=self.session_id,
                 summary_file=summary_file.name,
                 summary_data=summary_data_bytes  # Store as binary blob (like model_data)
             )
@@ -385,17 +378,12 @@ Feature Columns:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS xgboost_models (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    session_id VARCHAR(100) NOT NULL,
                     model_name VARCHAR(200) NOT NULL,
                     model_version VARCHAR(50),
                     model_file VARCHAR(500),
-                    is_latest BOOLEAN DEFAULT FALSE,
                     model_data LONGBLOB,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_session_id (session_id),
-                    INDEX idx_created_at (created_at),
-                    INDEX idx_model_name (model_name),
-                    INDEX idx_is_latest (is_latest)
+                    INDEX idx_model_version_created (model_version, created_at DESC)
                 )
             """)
 
@@ -403,7 +391,7 @@ Feature Columns:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS xgboost_dataset_summary (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    training_session_id VARCHAR(100),
+                    model_version VARCHAR(50),
                     summary_file VARCHAR(500),
                     summary_content TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -413,8 +401,7 @@ Feature Columns:
                     total_records INT,
                     start_time VARCHAR(50),
                     end_time VARCHAR(50),
-                    INDEX idx_training_session (training_session_id),
-                    INDEX idx_created_at (created_at)
+                    INDEX idx_model_version_created (model_version, created_at DESC)
                 )
             """)
 
@@ -436,12 +423,12 @@ Feature Columns:
             # Insert into database
             insert_query = """
             INSERT INTO xgboost_dataset_summary
-            (training_session_id, summary_file, summary_content, exchange, pair, time_interval, total_records)
+            (model_version, summary_file, summary_content, exchange, pair, time_interval, total_records)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
 
             cursor.execute(insert_query, (
-                self.session_id,
+                'spot',  # default model_version
                 filename,
                 summary_content,
                 exchange,

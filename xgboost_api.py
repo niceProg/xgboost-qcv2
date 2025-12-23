@@ -66,7 +66,7 @@ class HealthResponse(BaseModel):
 
 class ModelResponse(BaseModel):
     success: bool
-    session_id: str
+    id: int
     model_name: str
     model_version: str
     model_file: str
@@ -78,7 +78,7 @@ class ModelResponse(BaseModel):
 
 class DatasetSummaryResponse(BaseModel):
     success: bool
-    session_id: str
+    id: int
     model_version: str
     summary_file: str
     created_at: str
@@ -86,18 +86,17 @@ class DatasetSummaryResponse(BaseModel):
     content_type: str
     file_extension: str
 
-class SessionInfo(BaseModel):
-    session_id: str
+class ModelInfo(BaseModel):
+    id: int
     model_name: str
     model_version: Optional[str]
-    is_latest: bool
     created_at: str
     has_dataset_summary: bool
 
-class SessionsResponse(BaseModel):
+class ModelsResponse(BaseModel):
     success: bool
-    total_sessions: int
-    sessions: List[SessionInfo]
+    total_models: int
+    models: List[ModelInfo]
 
 class ErrorResponse(BaseModel):
     error: str
@@ -106,7 +105,6 @@ class ErrorResponse(BaseModel):
 class ModelInsertRequest(BaseModel):
     model_name: str
     model_data_base64: str
-    is_latest: bool = True
     feature_names: Optional[List[str]] = []
     hyperparams: Optional[Dict] = {}
     train_score: Optional[float] = None
@@ -116,8 +114,7 @@ class ModelInsertRequest(BaseModel):
 class ModelInsertResponse(BaseModel):
     success: bool
     message: str
-    session_id: str
-    model_id: Optional[int] = None
+    model_id: int
 
 def encode_to_base64(data: bytes) -> str:
     """Encode bytes to base64 string."""
@@ -137,7 +134,7 @@ def read_file_as_base64(file_path: str) -> Optional[str]:
 # =========================================================
 
 def get_latest_model_by_version(model_version: str):
-    """Helper function to get latest model by version (spot/futures)."""
+    """Helper function to get latest model by version (spot/futures) using created_at."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -145,15 +142,13 @@ def get_latest_model_by_version(model_version: str):
         )
 
     try:
-        # Get latest model from database with specific version
-        model, feature_names, session_id = db_storage.load_latest_model()
-
-        # Verify the model version matches
         db = db_storage.get_session()
+
+        # Get latest model from database with specific version using created_at DESC
         model_record = db.query(db_storage.db_model).filter(
-            db_storage.db_model.session_id == session_id,
-            db_storage.db_model.is_latest == True,
             db_storage.db_model.model_version == model_version
+        ).order_by(
+            db_storage.db_model.created_at.desc()
         ).first()
 
         if not model_record:
@@ -163,6 +158,10 @@ def get_latest_model_by_version(model_version: str):
                 detail=f"No {model_version} model found"
             )
 
+        # Load model from binary data
+        model = pickle.loads(model_record.model_data)
+        feature_names = []  # feature_names tidak disimpan per client requirement
+
         # Serialize model to bytes
         model_bytes = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -171,7 +170,7 @@ def get_latest_model_by_version(model_version: str):
 
         response = ModelResponse(
             success=True,
-            session_id=session_id,
+            id=model_record.id,
             model_name=model_record.model_name,
             model_version=model_record.model_version,
             model_file=model_record.model_file,
@@ -183,7 +182,7 @@ def get_latest_model_by_version(model_version: str):
         )
 
         db.close()
-        logger.info(f"✅ Retrieved latest {model_version} model for session: {session_id}")
+        logger.info(f"✅ Retrieved latest {model_version} model (ID: {model_record.id})")
         return response
 
     except HTTPException:
@@ -219,7 +218,7 @@ def get_dataset_summary_by_version(model_version: str):
             db.close()
             return DatasetSummaryResponse(
                 success=False,
-                session_id="",
+                id=0,
                 model_version=model_version,
                 summary_file="",
                 created_at=datetime.utcnow().isoformat(),
@@ -254,7 +253,7 @@ def get_dataset_summary_by_version(model_version: str):
 
         response = DatasetSummaryResponse(
             success=True,
-            session_id=summary_record.session_id,
+            id=summary_record.id,
             model_version=summary_record.model_version,
             summary_file=summary_record.summary_file,
             created_at=summary_record.created_at.isoformat(),
@@ -264,7 +263,7 @@ def get_dataset_summary_by_version(model_version: str):
         )
 
         db.close()
-        logger.info(f"✅ Retrieved {model_version} dataset summary for session: {summary_record.session_id}")
+        logger.info(f"✅ Retrieved {model_version} dataset summary (ID: {summary_record.id})")
         return response
 
     except HTTPException:
@@ -276,8 +275,8 @@ def get_dataset_summary_by_version(model_version: str):
             detail=f"Failed to retrieve dataset summary: {str(e)}"
         )
 
-def get_model_by_session_version(session_id: str, model_version: str):
-    """Helper function to get model by session ID and version."""
+def get_summary_by_id_version(summary_id: int, model_version: str):
+    """Helper function to get dataset summary by ID and version."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -285,13 +284,82 @@ def get_model_by_session_version(session_id: str, model_version: str):
         )
 
     try:
-        # Load specific model by session_id
-        model, feature_names, _ = db_storage.load_latest_model(session_id=session_id)
+        db = db_storage.get_session()
 
-        # Get model metadata
+        # Get dataset summary by ID and version
+        summary_record = db.query(db_storage.db_dataset_summary).filter(
+            db_storage.db_dataset_summary.id == summary_id,
+            db_storage.db_dataset_summary.model_version == model_version
+        ).first()
+
+        if not summary_record:
+            db.close()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No {model_version} dataset summary found with id: {summary_id}"
+            )
+
+        # Try to get summary from database first (new behavior)
+        summary_base64 = None
+
+        if summary_record.summary_data:
+            # Summary data exists in database as blob - encode to base64
+            summary_base64 = encode_to_base64(summary_record.summary_data)
+            logger.info(f"✅ Retrieved {model_version} dataset summary blob from database")
+        else:
+            # Fallback: Try to read from file (backward compatibility)
+            summary_file_path = summary_record.summary_file
+
+            # Try to find the file in common locations
+            possible_paths = [
+                f"./output_train/datasets/summary/{summary_file_path}",
+                f"./output_train/{summary_file_path}",
+                summary_file_path
+            ]
+
+            for path in possible_paths:
+                if os.path.exists(path):
+                    summary_base64 = read_file_as_base64(path)
+                    logger.info(f"✅ Retrieved {model_version} dataset summary from file: {path}")
+                    break
+
+        response = DatasetSummaryResponse(
+            success=True,
+            id=summary_record.id,
+            model_version=summary_record.model_version,
+            summary_file=summary_record.summary_file,
+            created_at=summary_record.created_at.isoformat(),
+            summary_data_base64=summary_base64,
+            content_type='text/plain',
+            file_extension='.txt'
+        )
+
+        db.close()
+        logger.info(f"✅ Retrieved {model_version} dataset summary (ID: {summary_id})")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Failed to get {model_version} dataset summary: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve dataset summary: {str(e)}"
+        )
+
+def get_model_by_id_version(model_id: int, model_version: str):
+    """Helper function to get model by ID and version."""
+    if not db_storage:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database not connected"
+        )
+
+    try:
+        # Get model metadata from database
         db = db_storage.get_session()
         model_record = db.query(db_storage.db_model).filter(
-            db_storage.db_model.session_id == session_id,
+            db_storage.db_model.id == model_id,
             db_storage.db_model.model_version == model_version
         ).first()
 
@@ -299,8 +367,12 @@ def get_model_by_session_version(session_id: str, model_version: str):
             db.close()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No {model_version} model found with session_id: {session_id}"
+                detail=f"No {model_version} model found with id: {model_id}"
             )
+
+        # Load model from binary data
+        model = pickle.loads(model_record.model_data)
+        feature_names = []  # feature_names tidak disimpan per client requirement
 
         # Serialize model to bytes
         model_bytes = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
@@ -310,7 +382,7 @@ def get_model_by_session_version(session_id: str, model_version: str):
 
         response = ModelResponse(
             success=True,
-            session_id=session_id,
+            id=model_id,
             model_name=model_record.model_name,
             model_version=model_record.model_version,
             model_file=model_record.model_file,
@@ -322,20 +394,20 @@ def get_model_by_session_version(session_id: str, model_version: str):
         )
 
         db.close()
-        logger.info(f"✅ Retrieved {model_version} model for session: {session_id}")
+        logger.info(f"✅ Retrieved {model_version} model (ID: {model_id})")
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Failed to get {model_version} model for session {session_id}: {e}")
+        logger.error(f"❌ Failed to get {model_version} model for id {model_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve model: {str(e)}"
         )
 
-def get_sessions_by_version(model_version: str):
-    """Helper function to list sessions by version."""
+def list_models_by_version(model_version: str):
+    """Helper function to list models by version."""
     if not db_storage:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -352,36 +424,34 @@ def get_sessions_by_version(model_version: str):
             db_storage.db_model.created_at.desc()
         ).all()
 
-        sessions = []
+        model_list = []
         for model in models:
-            # Check if dataset summary exists
+            # Check if dataset summary exists (by version and closest created_at)
             summary_exists = db.query(db_storage.db_dataset_summary).filter(
-                db_storage.db_dataset_summary.session_id == model.session_id,
                 db_storage.db_dataset_summary.model_version == model_version
             ).first() is not None
 
-            sessions.append(SessionInfo(
-                session_id=model.session_id,
+            model_list.append(ModelInfo(
+                id=model.id,
                 model_name=model.model_name,
                 model_version=model.model_version,
-                is_latest=model.is_latest,
                 created_at=model.created_at.isoformat(),
                 has_dataset_summary=summary_exists
             ))
 
         db.close()
 
-        return SessionsResponse(
+        return ModelsResponse(
             success=True,
-            total_sessions=len(sessions),
-            sessions=sessions
+            total_models=len(model_list),
+            models=model_list
         )
 
     except Exception as e:
-        logger.error(f"❌ Failed to list {model_version} sessions: {e}")
+        logger.error(f"❌ Failed to list {model_version} models: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve sessions: {str(e)}"
+            detail=f"Failed to retrieve models: {str(e)}"
         )
 
 def insert_model_by_version(model_request: ModelInsertRequest, model_version: str):
@@ -397,12 +467,8 @@ def insert_model_by_version(model_request: ModelInsertRequest, model_version: st
         model_bytes = base64.b64decode(model_request.model_data_base64)
         model = pickle.loads(model_bytes)
 
-        # Generate new session_id for this model
-        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        db_storage.session_id = session_id
-
-        # Store the model using the store_model method
-        returned_session_id = db_storage.store_model(
+        # Store the model using the store_model method (returns model_id)
+        model_id = db_storage.store_model(
             model=model,
             model_name=model_request.model_name,
             feature_names=model_request.feature_names,
@@ -410,25 +476,14 @@ def insert_model_by_version(model_request: ModelInsertRequest, model_version: st
             train_score=model_request.train_score,
             val_score=model_request.val_score,
             cv_scores=model_request.cv_scores,
-            is_latest=model_request.is_latest,
             model_version=model_version  # 'spot' or 'futures'
         )
 
-        # Get the inserted model record ID
-        db = db_storage.get_session()
-        model_record = db.query(db_storage.db_model).filter(
-            db_storage.db_model.session_id == returned_session_id
-        ).first()
-        model_id = model_record.id if model_record else None
-
-        db.close()
-
-        logger.info(f"✅ Successfully inserted {model_version} model: {model_request.model_name} (Session: {returned_session_id})")
+        logger.info(f"✅ Successfully inserted {model_version} model: {model_request.model_name} (ID: {model_id})")
 
         return ModelInsertResponse(
             success=True,
             message=f"Model inserted successfully (version: {model_version})",
-            session_id=returned_session_id,
             model_id=model_id
         )
 
@@ -466,15 +521,20 @@ async def get_spot_latest_dataset_summary():
     """Get latest spot dataset summary with base64 encoding."""
     return get_dataset_summary_by_version('spot')
 
-@app.get("/api/v1/spot/model/{session_id}", response_model=ModelResponse)
-async def get_spot_model_by_session(session_id: str):
-    """Get spot model by specific session ID."""
-    return get_model_by_session_version(session_id, 'spot')
+@app.get("/api/v1/spot/summary/{summary_id}", response_model=DatasetSummaryResponse)
+async def get_spot_summary_by_id(summary_id: int):
+    """Get spot dataset summary by specific ID."""
+    return get_summary_by_id_version(summary_id, 'spot')
 
-@app.get("/api/v1/spot/sessions", response_model=SessionsResponse)
-async def list_spot_sessions():
-    """List all available spot training sessions."""
-    return get_sessions_by_version('spot')
+@app.get("/api/v1/spot/model/{model_id}", response_model=ModelResponse)
+async def get_spot_model_by_id(model_id: int):
+    """Get spot model by specific ID."""
+    return get_model_by_id_version(model_id, 'spot')
+
+@app.get("/api/v1/spot/models", response_model=ModelsResponse)
+async def list_spot_models():
+    """List all available spot models."""
+    return list_models_by_version('spot')
 
 @app.post("/api/v1/spot/model", response_model=ModelInsertResponse)
 async def insert_spot_model(model_request: ModelInsertRequest):
@@ -495,15 +555,20 @@ async def get_futures_latest_dataset_summary():
     """Get latest futures dataset summary with base64 encoding."""
     return get_dataset_summary_by_version('futures')
 
-@app.get("/api/v1/futures/model/{session_id}", response_model=ModelResponse)
-async def get_futures_model_by_session(session_id: str):
-    """Get futures model by specific session ID."""
-    return get_model_by_session_version(session_id, 'futures')
+@app.get("/api/v1/futures/summary/{summary_id}", response_model=DatasetSummaryResponse)
+async def get_futures_summary_by_id(summary_id: int):
+    """Get futures dataset summary by specific ID."""
+    return get_summary_by_id_version(summary_id, 'futures')
 
-@app.get("/api/v1/futures/sessions", response_model=SessionsResponse)
-async def list_futures_sessions():
-    """List all available futures training sessions."""
-    return get_sessions_by_version('futures')
+@app.get("/api/v1/futures/model/{model_id}", response_model=ModelResponse)
+async def get_futures_model_by_id(model_id: int):
+    """Get futures model by specific ID."""
+    return get_model_by_id_version(model_id, 'futures')
+
+@app.get("/api/v1/futures/models", response_model=ModelsResponse)
+async def list_futures_models():
+    """List all available futures models."""
+    return list_models_by_version('futures')
 
 @app.post("/api/v1/futures/model", response_model=ModelInsertResponse)
 async def insert_futures_model(model_request: ModelInsertRequest):
@@ -541,15 +606,17 @@ if __name__ == "__main__":
     logger.info("   SPOT Endpoints:")
     logger.info("   GET /api/v1/spot/latest/model - Get latest spot model")
     logger.info("   GET /api/v1/spot/latest/dataset-summary - Get latest spot dataset summary")
-    logger.info("   GET /api/v1/spot/model/<session_id> - Get spot model by session")
-    logger.info("   GET /api/v1/spot/sessions - List all spot sessions")
+    logger.info("   GET /api/v1/spot/model/{model_id} - Get spot model by ID")
+    logger.info("   GET /api/v1/spot/summary/{summary_id} - Get spot dataset summary by ID")
+    logger.info("   GET /api/v1/spot/models - List all spot models")
     logger.info("   POST /api/v1/spot/model - Insert new spot model")
     logger.info("")
     logger.info("   FUTURES Endpoints:")
     logger.info("   GET /api/v1/futures/latest/model - Get latest futures model")
     logger.info("   GET /api/v1/futures/latest/dataset-summary - Get latest futures dataset summary")
-    logger.info("   GET /api/v1/futures/model/<session_id> - Get futures model by session")
-    logger.info("   GET /api/v1/futures/sessions - List all futures sessions")
+    logger.info("   GET /api/v1/futures/model/{model_id} - Get futures model by ID")
+    logger.info("   GET /api/v1/futures/summary/{summary_id} - Get futures dataset summary by ID")
+    logger.info("   GET /api/v1/futures/models - List all futures models")
     logger.info("   POST /api/v1/futures/model - Insert new futures model")
     logger.info("")
     logger.info("📖 API docs available at: http://localhost:5000/docs")
