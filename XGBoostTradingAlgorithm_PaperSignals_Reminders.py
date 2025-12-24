@@ -715,10 +715,10 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
     # LOAD MODEL FROM API
     # =========================================================
     def LoadModelFromAPI(self):
-        """Load XGBoost model from API."""
+        """Load XGBoost model from API (futures endpoint)."""
         for attempt in range(self.api_retry_count):
             try:
-                url = f"{self.api_base_url}/api/v1/latest/model"
+                url = f"{self.api_base_url}/api/v1/futures/latest/model"
                 self.Debug(f"Fetching model from: {url}")
 
                 response = requests.get(url, timeout=self.api_timeout)
@@ -935,6 +935,11 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
     # FEATURES
     # =========================================================
     def BuildFeatures(self):
+        """
+        Build features that MATCH training feature_engineering.py (price-only mode).
+
+        CRITICAL: Feature calculations must match exactly with training to avoid feature mismatch.
+        """
         try:
             df = pd.DataFrame(list(self.price_window))
             cur = df.iloc[-1]
@@ -952,22 +957,46 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
             if len(closes) < 6:
                 return None
 
+            # ===== RETURNS (MATCH training pct_change) =====
+            # Training: df['price_close'].pct_change(1) = (close[t] - close[t-1]) / close[t-1]
+            # Which equals: close[t] / close[t-1] - 1
             ret_1 = closes[-1] / closes[-2] - 1.0 if closes[-2] > 0 else 0.0
+
+            # Training: df['price_close'].pct_change(5) = (close[t] - close[t-5]) / close[t-5]
             ret_5 = closes[-1] / closes[-6] - 1.0 if closes[-6] > 0 else 0.0
+
+            # Training: np.log(close[t] / close[t-1])
             log_ret = np.log(closes[-1] / closes[-2]) if closes[-2] > 0 else 0.0
 
-            returns = np.diff(closes) / closes[:-1]
-            vol_5 = float(np.std(returns[-5:])) if len(returns) >= 5 else 0.0
+            # ===== ROLLING VOL (FIXED to match training) =====
+            # Training: df['price_close_return_1'].rolling(5).std()
+            # This is std of LAST 5 return_1 values, NOT np.diff()!
+            # Calculate return_1 for all available bars
+            return_1_series = []
+            for i in range(1, min(6, len(closes))):  # Get up to 5 most recent return_1 values
+                if closes[i-1] > 0:
+                    return_1_series.append(closes[i] / closes[i-1] - 1.0)
+                else:
+                    return_1_series.append(0.0)
 
+            # vol_5 = std of last 5 return_1 values
+            vol_5 = float(np.std(return_1_series[-5:])) if len(return_1_series) >= 5 else 0.0
+
+            # ===== OTHER FEATURES =====
             true_range = high - low
             mean_5 = float(np.mean(closes[-5:]))
             std_5 = float(np.std(closes[-5:]))
 
+            # Volume features
             vol_mean_10 = float(np.mean(volumes[-10:])) if len(volumes) >= 10 else volume
             vol_std_10 = float(np.std(volumes[-10:])) if len(volumes) >= 10 else 1.0
             vol_z = (volumes[-1] - vol_mean_10) / vol_std_10 if vol_std_10 > 0 else 0.0
+
+            # Training: df['price_volume_usd'].pct_change(1)
+            # But we only have volume count, so: volume[t] / volume[t-1] - 1
             vol_change = volumes[-1] / volumes[-2] - 1.0 if len(volumes) > 1 and volumes[-2] > 0 else 0.0
 
+            # Candlestick features
             wick_up = high - max(open_, close)
             wick_low = min(open_, close) - low
             body_size = abs(close - open_)
