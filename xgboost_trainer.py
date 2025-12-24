@@ -425,9 +425,11 @@ def main():
         # Prepare data splits
         X_train, X_val, X_test, y_train, y_val, y_test = trainer.prepare_data_splits(X, y)
 
-        # Hyperparameter tuning (optional - can be skipped for speed)
-        logger.info("Performing hyperparameter tuning...")
-        best_params = trainer.hyperparameter_tuning(X_train, y_train, X_val, y_val)
+        # DISABLED: Hyperparameter tuning was causing overfitting
+        # Using conservative default params instead to prevent overfitting
+        logger.info("Using conservative default parameters (hyperparameter tuning disabled to prevent overfitting)...")
+        best_params = trainer.get_default_xgboost_params()
+        logger.info(f"Parameters: {best_params}")
 
         # Train final model
         logger.info("Training final model...")
