@@ -216,8 +216,9 @@ class LabelBuilder:
         # Verify that time is properly sorted
         for (exchange, symbol, interval), group in df.groupby(['exchange', 'symbol', 'interval']):
             time_diffs = group['time'].diff().dropna()
-            # Convert to seconds for comparison (avoid numpy array vs Timedelta comparison)
-            if time_diffs.dt.total_seconds().le(0).any():
+            # time is Unix timestamp in milliseconds, so we can compare directly
+            # Negative or zero values mean time is not sorted properly
+            if (time_diffs <= 0).any():
                 logger.warning(f"Time not properly sorted for {exchange}/{symbol}/{interval}")
                 break
         else:
