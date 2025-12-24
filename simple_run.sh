@@ -48,8 +48,9 @@ run_step() {
     fi
 }
 
-# Parse extra flags (optional: --days N, --time start,end, --year-2024)
+# Parse extra flags (optional: --days N, --time start,end, --year-2024, --price-only)
 EXTRA_FLAGS=""
+export PRICE_ONLY_MODE="false"  # Default: full mode (105 features)
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --days)
@@ -66,6 +67,11 @@ while [[ $# -gt 0 ]]; do
             echo "📅 Filtering data from 2024 to present"
             shift
             ;;
+        --price-only)
+            export PRICE_ONLY_MODE="true"
+            echo "🔵 PRICE-ONLY MODE: Using only price features (QuantConnect compatible)"
+            shift
+            ;;
         *)
             shift
             ;;
@@ -74,7 +80,14 @@ done
 
 # Run each step
 run_step "load_database.py" "Step 1: Load Database" $EXTRA_FLAGS
-run_step "merge_7_tables.py" "Step 2: Merge Tables" $EXTRA_FLAGS
+
+# Skip merge step in price-only mode (only 1 table, nothing to merge)
+if [ "$PRICE_ONLY_MODE" = "true" ]; then
+    echo "🔵 PRICE-ONLY MODE: Skipping Step 2 (Merge Tables)"
+else
+    run_step "merge_7_tables.py" "Step 2: Merge Tables" $EXTRA_FLAGS
+fi
+
 run_step "feature_engineering.py" "Step 3: Feature Engineering" $EXTRA_FLAGS
 run_step "label_builder.py" "Step 4: Label Building" $EXTRA_FLAGS
 run_step "xgboost_trainer.py" "Step 5: Model Training" $EXTRA_FLAGS

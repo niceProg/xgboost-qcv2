@@ -48,10 +48,13 @@ class DatabaseLoader:
     """Load data from 9 database tables with filtering capabilities (5 core + 4 support/regime filter)."""
 
     def __init__(self, data_filter: DataFilter, output_dir: str = './output_train',
-                 enable_db_storage: bool = True):
+                 enable_db_storage: bool = True, price_only_mode: bool = False):
         self.data_filter = data_filter
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
+
+        # Price-only mode: only load price history table (for QuantConnect compatibility)
+        self.price_only_mode = price_only_mode
 
         # Initialize database storage
         self.enable_db_storage = enable_db_storage
@@ -59,6 +62,10 @@ class DatabaseLoader:
             self.db_storage = DatabaseStorage(storage_path=output_dir)
         else:
             self.db_storage = None
+
+        # Log mode
+        if self.price_only_mode:
+            logger.info("🔵 PRICE-ONLY MODE: Only loading cg_futures_price_history (QuantConnect compatible)")
 
         # Database configuration from .env file (trading database)
         self.db_config = {
@@ -379,12 +386,24 @@ class DatabaseLoader:
     def load_all_tables(self) -> Dict[str, pd.DataFrame]:
         """Load data from all 9 tables (5 core + 4 support/regime filter)."""
         all_data = {}
-        for table_name in self.tables.keys():
+
+        # Price-only mode: only load price history table
+        if self.price_only_mode:
+            logger.info("Price-only mode: Loading only cg_futures_price_history")
+            table_name = 'cg_futures_price_history'
             df = self.load_table_data(table_name)
             if not df.empty:
                 all_data[table_name] = df
             else:
-                logger.warning(f"No data loaded from {table_name}")
+                logger.error(f"No data loaded from {table_name}")
+        else:
+            # Full mode: load all 9 tables
+            for table_name in self.tables.keys():
+                df = self.load_table_data(table_name)
+                if not df.empty:
+                    all_data[table_name] = df
+                else:
+                    logger.warning(f"No data loaded from {table_name}")
         return all_data
 
     def save_table_data(self, table_name: str, df: pd.DataFrame):
@@ -459,7 +478,9 @@ def main():
     data_filter.print_filter_summary()
 
     enable_db_storage = os.getenv('ENABLE_DB_STORAGE', 'true').lower() == 'true'
-    loader = DatabaseLoader(data_filter, args.output_dir, enable_db_storage)
+    price_only_mode = os.getenv('PRICE_ONLY_MODE', 'false').lower() == 'true'
+
+    loader = DatabaseLoader(data_filter, args.output_dir, enable_db_storage, price_only_mode)
 
     # DATABASE STORAGE DISABLED per client requirement
     if enable_db_storage and loader.db_storage:
@@ -479,7 +500,11 @@ def main():
                 loader.save_table_data(table_name, df)
 
             logger.info(f"\nAll data saved to {loader.output_dir}")
-            logger.info("Ready for merge_7_tables.py")
+
+            if price_only_mode:
+                logger.info("Price-only mode: Skipping merge, ready for feature_engineering.py")
+            else:
+                logger.info("Ready for merge_7_tables.py")
         else:
             logger.error("No data could be loaded. Please check your database connection.")
             sys.exit(1)

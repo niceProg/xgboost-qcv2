@@ -389,6 +389,16 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Check for price-only mode
+    price_only_mode = os.getenv('PRICE_ONLY_MODE', 'false').lower() == 'true'
+
+    if price_only_mode:
+        logger.info("🔵 PRICE-ONLY MODE: Skipping merge step (only 1 table - price history)")
+        logger.info("Price data will be used directly by feature_engineering.py")
+        logger.info("\n=== Merge Skipped ===")
+        logger.info("Ready for feature_engineering.py")
+        return
+
     # Create data filter
     data_filter = DataFilter(args)
 

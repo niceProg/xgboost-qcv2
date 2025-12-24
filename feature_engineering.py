@@ -40,15 +40,39 @@ logger = logging.getLogger(__name__)
 class FeatureEngineer:
     """Implement feature engineering for futures-only trading data (9 tables)."""
 
-    def __init__(self, data_filter: DataFilter, output_dir: str = './output_train'):
+    def __init__(self, data_filter: DataFilter, output_dir: str = './output_train', price_only_mode: bool = False):
         self.data_filter = data_filter
         self.output_dir = Path(output_dir)
         self.feature_columns = []
+        self.price_only_mode = price_only_mode
+
+        # Log mode
+        if self.price_only_mode:
+            logger.info("🔵 PRICE-ONLY MODE: Only creating price features (QuantConnect compatible)")
 
     def load_merged_data(self) -> pd.DataFrame:
-        """Load merged data from previous step."""
-        logger.info("Loading merged data...")
+        """Load merged data from previous step, or raw price data in price-only mode."""
+        logger.info("Loading data for feature engineering...")
 
+        # In price-only mode, load raw price data directly
+        if self.price_only_mode:
+            raw_data_dir = self.output_dir / 'datasets' / 'raw'
+            price_file = raw_data_dir / 'cg_futures_price_history.parquet'
+
+            if not price_file.exists():
+                logger.error(f"Price data file not found: {price_file}")
+                logger.error("Please run load_database.py with PRICE_ONLY_MODE=true first")
+                sys.exit(1)
+
+            try:
+                df = pd.read_parquet(price_file)
+                logger.info(f"Loaded {len(df)} rows with {len(df.columns)} columns (price-only mode)")
+                return df
+            except Exception as e:
+                logger.error(f"Error loading price data: {e}")
+                sys.exit(1)
+
+        # Full mode: load merged data
         # Try datasets directory first (new structure), then root (compatibility)
         datasets_dir = self.output_dir / 'datasets'
         merged_file = datasets_dir / 'merged_9_tables.parquet'
@@ -527,27 +551,36 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Check for price-only mode
+    price_only_mode = os.getenv('PRICE_ONLY_MODE', 'false').lower() == 'true'
+
     # Create data filter
     data_filter = DataFilter(args)
 
     # Initialize feature engineer
-    engineer = FeatureEngineer(data_filter, args.output_dir)
+    engineer = FeatureEngineer(data_filter, args.output_dir, price_only_mode)
 
     try:
-        # Load merged data
-        logger.info("Loading merged data for feature engineering...")
+        # Load data
+        logger.info("Loading data for feature engineering...")
         df = engineer.load_merged_data()
 
         # Add features for each table type
         df = engineer.add_price_features(df)
-        df = engineer.add_funding_features(df)
-        df = engineer.add_basis_features(df)
-        df = engineer.add_taker_volume_features(df)
-        df = engineer.add_orderbook_features(df)
-        df = engineer.add_open_interest_features(df)
-        df = engineer.add_liquidation_features(df)
-        df = engineer.add_longshort_features(df)
-        df = engineer.add_cross_table_features(df)
+
+        # PRICE-ONLY MODE: Skip all non-price features (QuantConnect compatibility)
+        if not price_only_mode:
+            # Full mode: add all futures features
+            df = engineer.add_funding_features(df)
+            df = engineer.add_basis_features(df)
+            df = engineer.add_taker_volume_features(df)
+            df = engineer.add_orderbook_features(df)
+            df = engineer.add_open_interest_features(df)
+            df = engineer.add_liquidation_features(df)
+            df = engineer.add_longshort_features(df)
+            df = engineer.add_cross_table_features(df)
+        else:
+            logger.info("Price-only mode: Skipping futures-specific features (funding, basis, OI, LS, taker, orderbook, liquidation)")
 
         # Clean features
         df = engineer.clean_features(df)
