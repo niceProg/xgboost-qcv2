@@ -78,7 +78,8 @@ run_step "merge_7_tables.py" "Step 2: Merge Tables" $EXTRA_FLAGS
 run_step "feature_engineering.py" "Step 3: Feature Engineering" $EXTRA_FLAGS
 run_step "label_builder.py" "Step 4: Label Building" $EXTRA_FLAGS
 run_step "xgboost_trainer.py" "Step 5: Model Training" $EXTRA_FLAGS
-run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation" $EXTRA_FLAGS
+# DISABLED: Model evaluation - backtest will be done in QuantConnect instead
+# run_step "model_evaluation_with_leverage.py" "Step 6: Model Evaluation" $EXTRA_FLAGS
 
 
 echo "=========================================="
