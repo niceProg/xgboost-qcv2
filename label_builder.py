@@ -216,14 +216,16 @@ class LabelBuilder:
         # Verify that time is properly sorted
         for (exchange, symbol, interval), group in df.groupby(['exchange', 'symbol', 'interval']):
             time_diffs = group['time'].diff().dropna()
-            if (time_diffs <= pd.Timedelta(0)).any():
+            # Convert to seconds for comparison (avoid numpy array vs Timedelta comparison)
+            if time_diffs.dt.total_seconds().le(0).any():
                 logger.warning(f"Time not properly sorted for {exchange}/{symbol}/{interval}")
                 break
         else:
             logger.info("Time validation passed - no future leakage detected")
 
         # Check feature-label correlation (basic sanity check)
-        feature_cols = [col for col in df.columns if col.startswith(('price_', 'funding_', 'basis_', 'taker_', 'ob_', 'ls_', 'cross_'))]
+        # Note: In price-only mode, only price_ features exist
+        feature_cols = [col for col in df.columns if col.startswith(('price_', 'funding_', 'basis_', 'taker_', 'ob_', 'ls_', 'liq_', 'cross_'))]
         if feature_cols:
             correlations = df[feature_cols + [self.label_col]].corr()[self.label_col].abs().sort_values(ascending=False)
             logger.info("Top 10 feature-label correlations:")
