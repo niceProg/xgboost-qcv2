@@ -1,0 +1,17 @@
+{
+  "total_return": 135871.8785697025,
+  "benchmark_return": 1.1123759903770232,
+  "cagr": 395.82951972503406,
+  "benchmark_cagr": 0.4602009146686805,
+  "max_drawdown": -0.27521663050445433,
+  "benchmark_max_drawdown": -0.3476362452970968,
+  "sharpe_ratio": 1.5869979787043804,
+  "win_rate": 0.5757960167448941,
+  "profit_factor": 1.0783464116109398,
+  "total_trades": 7883,
+  "winning_trades": 4539,
+  "losing_trades": 3344,
+  "avg_win": 0.008646976262387208,
+  "avg_loss": -0.008018736993309511,
+  "trading_days": 721
+}

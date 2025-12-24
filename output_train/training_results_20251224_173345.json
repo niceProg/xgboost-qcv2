@@ -1,0 +1,42 @@
+{
+  "model_name": "xgboost_trading_model_20251224_173345.joblib",
+  "timestamp": "20251224_173345",
+  "parameters": {
+    "objective": "binary:logistic",
+    "eval_metric": [
+      "logloss",
+      "auc"
+    ],
+    "learning_rate": 0.05,
+    "max_depth": 4,
+    "min_child_weight": 10,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "lambda": 1.0,
+    "alpha": 0.0,
+    "n_estimators": 300,
+    "early_stopping_rounds": 20,
+    "random_state": 42,
+    "verbosity": 1
+  },
+  "metrics": {
+    "accuracy": 0.5650630914826499,
+    "precision": 0.5687022900763359,
+    "recall": 0.6777862016679302,
+    "f1": 0.6184711172604636,
+    "roc_auc": 0.5939941054918849
+  },
+  "cross_validation": {
+    "mean_auc": 0.5073329332300218,
+    "std_auc": 0.017947087447163054,
+    "cv_scores": [
+      0.5083604152318641,
+      0.48129325181648624,
+      0.5096953504249612,
+      0.5369510154154349,
+      0.5003646332613623
+    ]
+  },
+  "feature_count": 105,
+  "sample_count": 105
+}

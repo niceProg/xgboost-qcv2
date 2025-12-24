@@ -103,17 +103,16 @@ class XGBoostTrainer:
         return {
             'objective': 'binary:logistic',
             'eval_metric': ['logloss', 'auc'],
-            'learning_rate': 0.1,
-            'max_depth': 6,
-            'min_child_weight': 1,
+            'learning_rate': 0.05,
+            'max_depth': 4,
+            'min_child_weight': 10,
             'subsample': 0.8,
             'colsample_bytree': 0.8,
-            'colsample_bylevel': 0.8,
-            'alpha': 0,  # L1 regularization
-            'lambda': 1,  # L2 regularization
+            'lambda': 1.0,
+            'alpha': 0.0,
+            'n_estimators': 300,
+            'early_stopping_rounds': 20,
             'random_state': 42,
-            'n_estimators': 100,
-            'early_stopping_rounds': 10,
             'verbosity': 1
         }
 
@@ -350,14 +349,14 @@ class XGBoostTrainer:
 
     def hyperparameter_tuning(self, X_train: pd.DataFrame, y_train: pd.Series,
                             X_val: pd.DataFrame, y_val: pd.Series) -> dict:
-        """Basic hyperparameter tuning."""
+        """Basic hyperparameter tuning (V1 spot config)."""
         logger.info("Performing hyperparameter tuning...")
 
         base_params = self.get_default_xgboost_params()
         best_auc = 0
         best_params = base_params.copy()
 
-        # Define parameter grid
+        # Define parameter grid (V1 config)
         param_grid = {
             'learning_rate': [0.01, 0.1, 0.2],
             'max_depth': [4, 6, 8],
@@ -425,13 +424,13 @@ def main():
         # Prepare data splits
         X_train, X_val, X_test, y_train, y_val, y_test = trainer.prepare_data_splits(X, y)
 
-        # Hyperparameter tuning (optional - can be skipped for speed)
-        logger.info("Performing hyperparameter tuning...")
-        best_params = trainer.hyperparameter_tuning(X_train, y_train, X_val, y_val)
+        # Hyperparameter tuning DISABLED - use default params to prevent overfitting
+        logger.info("Using default XGBoost parameters (hyperparameter tuning disabled)")
+        params = trainer.get_default_xgboost_params()
 
-        # Train final model
-        logger.info("Training final model...")
-        model = trainer.train_model(X_train, y_train, X_val, y_val, best_params)
+        # Train final model with default params
+        logger.info("Training model...")
+        model = trainer.train_model(X_train, y_train, X_val, y_val, params)
 
         # Evaluate model
         metrics, cm = trainer.evaluate_model(model, X_test, y_test)

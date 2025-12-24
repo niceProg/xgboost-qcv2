@@ -48,7 +48,7 @@ run_step() {
     fi
 }
 
-# Parse extra flags (optional: --days N, --time start,end)
+# Parse extra flags (optional: --days N, --time start,end, --year-2024)
 EXTRA_FLAGS=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -59,6 +59,12 @@ while [[ $# -gt 0 ]]; do
         --time)
             EXTRA_FLAGS="$EXTRA_FLAGS --time $2"
             shift 2
+            ;;
+        --year-2024)
+            # Unix timestamp for 2024-01-01 in milliseconds (to present)
+            EXTRA_FLAGS="$EXTRA_FLAGS --time 1704067200000,"
+            echo "📅 Filtering data from 2024 to present"
+            shift
             ;;
         *)
             shift

@@ -474,6 +474,86 @@ class ModelEvaluator:
 
         return metrics
 
+    def calculate_metrics_from_csv(self) -> dict:
+        """
+        Calculate metrics from actual CSV files (trades.csv and rekening_koran.csv).
+        This provides MORE ACCURATE real-world metrics compared to theoretical calculations.
+
+        Returns:
+            Dictionary with win_rate, profit_factor, total_return from actual trade results
+        """
+        logger.info("Calculating metrics from CSV files (trades.csv & rekening_koran.csv)...")
+
+        # Load trades.csv for win_rate and profit_factor
+        trades_path = self.output_dir / "trades.csv"
+        if not trades_path.exists():
+            logger.warning(f"trades.csv not found at {trades_path}")
+            return {}
+
+        trades_df = pd.read_csv(trades_path)
+        logger.info(f"Loaded {len(trades_df)} trades from trades.csv")
+
+        # Calculate win_rate from actual trades
+        if len(trades_df) > 0 and 'pnl' in trades_df.columns:
+            winning_trades = (trades_df['pnl'] > 0).sum()
+            total_trades = len(trades_df)
+            win_rate = winning_trades / total_trades if total_trades > 0 else 0.0
+
+            # Calculate profit factor from actual trades
+            wins = trades_df[trades_df['pnl'] > 0]['pnl'].sum() if winning_trades > 0 else 0.0
+            losses = abs(trades_df[trades_df['pnl'] < 0]['pnl'].sum()) if (total_trades - winning_trades) > 0 else 0.0
+            profit_factor = wins / losses if losses > 0 else float('inf') if wins > 0 else 0.0
+
+            avg_win = trades_df[trades_df['pnl'] > 0]['pnl'].mean() if winning_trades > 0 else 0.0
+            avg_loss = trades_df[trades_df['pnl'] < 0]['pnl'].mean() if (total_trades - winning_trades) > 0 else 0.0
+        else:
+            logger.warning("trades.csv does not have 'pnl' column")
+            win_rate = 0.0
+            profit_factor = 0.0
+            avg_win = 0.0
+            avg_loss = 0.0
+            winning_trades = 0
+            total_trades = 0
+
+        # Load rekening_koran.csv for total_return
+        rekening_path = self.output_dir / "rekening_koran.csv"
+        if rekening_path.exists():
+            rekening_df = pd.read_csv(rekening_path)
+            logger.info(f"Loaded {len(rekening_df)} account statements from rekening_koran.csv")
+
+            if 'Saldo' in rekening_df.columns and len(rekening_df) > 0:
+                initial_balance = rekening_df['Saldo'].iloc[0]
+                final_balance = rekening_df['Saldo'].iloc[-1]
+                total_return = (final_balance - initial_balance) / initial_balance if initial_balance > 0 else 0.0
+            else:
+                logger.warning("rekening_koran.csv does not have 'Saldo' column")
+                total_return = 0.0
+        else:
+            logger.warning(f"rekening_koran.csv not found at {rekening_path}")
+            total_return = 0.0
+
+        metrics_csv = {
+            "total_return_from_csv": float(total_return),
+            "win_rate_from_csv": float(win_rate),
+            "profit_factor_from_csv": float(profit_factor) if np.isfinite(profit_factor) else float('inf'),
+            "total_trades_from_csv": int(total_trades),
+            "winning_trades_from_csv": int(winning_trades),
+            "losing_trades_from_csv": int(total_trades - winning_trades),
+            "avg_win_from_csv": float(avg_win) if not np.isnan(avg_win) else 0.0,
+            "avg_loss_from_csv": float(avg_loss) if not np.isnan(avg_loss) else 0.0,
+        }
+
+        logger.info("Metrics from CSV files:")
+        logger.info(f"  Total Return: {total_return:.4%}")
+        logger.info(f"  Win Rate: {win_rate:.2%}")
+        logger.info(f"  Profit Factor: {profit_factor:.4f}")
+        logger.info(f"  Total Trades: {total_trades}")
+        logger.info(f"  Winning Trades: {winning_trades}")
+        logger.info(f"  Avg Win: {avg_win:.4f}")
+        logger.info(f"  Avg Loss: {avg_loss:.4f}")
+
+        return metrics_csv
+
     def create_performance_plots(self, df: pd.DataFrame, metrics: dict):
         logger.info("Creating performance plots...")
         if df.empty:

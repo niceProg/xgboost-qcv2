@@ -323,6 +323,14 @@ class DatabaseLoader:
                 # Drop unit column (contains 'coin' string, not needed for training)
                 df = df.drop(columns=['unit'], errors='ignore')
 
+                # Remove duplicates: taker data may have duplicate entries
+                # Keep the last entry for each time+exchange+symbol+interval combination
+                before_dedup = len(df)
+                df = df.drop_duplicates(subset=['time', 'exchange', 'symbol', 'interval'], keep='last')
+                after_dedup = len(df)
+                if before_dedup > after_dedup:
+                    logger.info(f"Removed {before_dedup - after_dedup} duplicate rows from {table_name}")
+
             # FIX: Ask/bids aggregated uses symbol=BTC (base), no exchange column
             if table_name == "cg_futures_aggregated_ask_bids_history":
                 if "symbol" in df.columns:
@@ -333,6 +341,14 @@ class DatabaseLoader:
                         df["symbol"] = df["symbol"] + "USDT"
                 # Drop base_asset column if exists
                 df = df.drop(columns=['base_asset'], errors='ignore')
+
+                # Remove duplicates: ask_bids has many duplicates due to range_percent aggregation
+                # Keep the last entry for each time+symbol+interval combination
+                before_dedup = len(df)
+                df = df.drop_duplicates(subset=['time', 'symbol', 'interval'], keep='last')
+                after_dedup = len(df)
+                if before_dedup > after_dedup:
+                    logger.info(f"Removed {before_dedup - after_dedup} duplicate rows from {table_name}")
 
             # FIX: Open interest aggregated uses symbol=BTC (base)
             if table_name == "cg_open_interest_aggregated_history":

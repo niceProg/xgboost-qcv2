@@ -1,6 +1,6 @@
 .xgboost-qcv2
 ./output_train/
-.env
+# .env
 .env.production
 __pycache__/
 .claude/

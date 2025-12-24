@@ -84,49 +84,72 @@ class LabelBuilder:
             logger.error(f"Error loading features: {e}")
             sys.exit(1)
 
-    def create_binary_labels(self, df: pd.DataFrame, threshold: float = 0.0) -> pd.DataFrame:
+    def create_binary_labels(self, df: pd.DataFrame, trend_window: int = 4, threshold: float = 0.002) -> pd.DataFrame:
         """
-        Create binary labels based on next bar price movement.
+        Create binary labels based on multi-bar trend prediction.
+
+        Instead of predicting next bar (very noisy), we predict trend over N bars.
+        Only predict direction when price move is significant (above threshold).
 
         Args:
             df: DataFrame with price data
-            threshold: Minimum price change to consider as movement (default: 0.0)
-                      Can be set to avoid very small price changes due to noise
+            trend_window: Number of bars to look ahead (default: 4 for 4-hour trend)
+            threshold: Minimum price change to consider as valid signal (default: 0.2%)
+                      Smaller moves below this are considered "noise" and excluded
 
         Returns:
             DataFrame with binary labels (0=down, 1=up)
+            Rows with insignificant price change are excluded
         """
         logger.info("Creating binary labels for trend prediction...")
+        logger.info(f"Trend window: {trend_window} bars, Threshold: {threshold*100:.2f}%")
 
         # Ensure data is sorted properly
         df = df.sort_values(['exchange', 'symbol', 'interval', 'time'])
 
-        # Calculate next bar's close price for each group
-        df['next_close'] = df.groupby(['exchange', 'symbol', 'interval'])['price_close'].shift(-1)
+        # Calculate future return over trend_window bars
+        df['future_close'] = df.groupby(['exchange', 'symbol', 'interval'])['price_close'].shift(-trend_window)
 
-        # Calculate price change
-        df['price_change'] = (df['next_close'] - df['price_close']) / df['price_close']
+        # Calculate price change over trend_window
+        df['trend_return'] = (df['future_close'] - df['price_close']) / df['price_close']
 
-        # Create binary labels
+        # Create binary labels with threshold filter
+        # Only predict when move is significant
         df[self.label_col] = np.where(
-            df['price_change'] > threshold,
-            1,  # Bullish - price went up
-            0   # Bearish - price went down or stayed same
+            df['trend_return'] > threshold,
+            1,  # Bullish - strong uptrend
+            np.where(
+                df['trend_return'] < -threshold,
+                0,  # Bearish - strong downtrend
+                np.nan  # Sideways/noise - exclude from training
+            )
         )
 
-        # Remove last row of each group (no next price available)
-        df = df.dropna(subset=['next_close', 'price_change', self.label_col])
+        # Remove rows with no clear trend (sideway/noise)
+        before_count = len(df)
+        df = df.dropna(subset=[self.label_col])
+        after_count = len(df)
+
+        logger.info(f"Filtered {before_count - after_count} low-conviction signals ({(before_count - after_count)/before_count*100:.1f}%)")
+        logger.info(f"Remaining high-conviction signals: {after_count}")
 
         # Log label distribution
         label_counts = df[self.label_col].value_counts()
         label_pct = df[self.label_col].value_counts(normalize=True) * 100
 
-        logger.info("Label Distribution:")
+        logger.info("Label Distribution (High-Conviction Only):")
         logger.info(f"Bullish (1): {label_counts.get(1, 0)} ({label_pct.get(1, 0):.1f}%)")
         logger.info(f"Bearish (0): {label_counts.get(0, 0)} ({label_pct.get(0, 0):.1f}%)")
 
-        # Clean up temporary columns
-        df = df.drop(columns=['next_close', 'price_change'])
+        # Log statistics about trend returns
+        bullish_returns = df[df[self.label_col] == 1]['trend_return']
+        bearish_returns = df[df[self.label_col] == 0]['trend_return']
+
+        logger.info(f"Bullish avg return: {bullish_returns.mean()*100:.3f}% (std: {bullish_returns.std()*100:.3f}%)")
+        logger.info(f"Bearish avg return: {bearish_returns.mean()*100:.3f}% (std: {bearish_returns.std()*100:.3f}%)")
+
+        # Clean up temporary columns (drop trend_return to prevent data leakage)
+        df = df.drop(columns=['future_close', 'trend_return'])
 
         return df
 
@@ -215,8 +238,8 @@ class LabelBuilder:
         """Prepare features and labels for training."""
         logger.info("Preparing training data...")
 
-        # Get feature columns (exclude metadata and label)
-        exclude_cols = ['time', 'exchange', 'symbol', 'interval', self.label_col]
+        # Get feature columns (exclude metadata, label, and trend_return to prevent data leakage)
+        exclude_cols = ['time', 'exchange', 'symbol', 'interval', self.label_col, 'trend_return']
         feature_cols = [col for col in df.columns if col not in exclude_cols]
 
         # Ensure we have features
