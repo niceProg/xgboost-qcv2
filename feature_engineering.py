@@ -66,7 +66,21 @@ class FeatureEngineer:
 
             try:
                 df = pd.read_parquet(price_file)
+
+                # Rename raw columns to match expected naming convention
+                # Raw: open, high, low, close, volume_usd
+                # Expected: price_open, price_high, price_low, price_close, price_volume_usd
+                column_mapping = {
+                    'open': 'price_open',
+                    'high': 'price_high',
+                    'low': 'price_low',
+                    'close': 'price_close',
+                    'volume_usd': 'price_volume_usd'
+                }
+
+                df = df.rename(columns=column_mapping)
                 logger.info(f"Loaded {len(df)} rows with {len(df.columns)} columns (price-only mode)")
+                logger.info(f"Columns: {list(df.columns)}")
                 return df
             except Exception as e:
                 logger.error(f"Error loading price data: {e}")
