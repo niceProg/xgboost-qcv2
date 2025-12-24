@@ -99,20 +99,21 @@ class XGBoostTrainer:
         return X_train, X_val, X_test, y_train, y_val, y_test
 
     def get_default_xgboost_params(self) -> dict:
-        """Get default XGBoost parameters for binary classification."""
+        """Get default XGBoost parameters for binary classification (V1 spot config)."""
         return {
             'objective': 'binary:logistic',
             'eval_metric': ['logloss', 'auc'],
-            'learning_rate': 0.05,
-            'max_depth': 4,
-            'min_child_weight': 10,
+            'learning_rate': 0.1,
+            'max_depth': 6,
+            'min_child_weight': 1,
             'subsample': 0.8,
             'colsample_bytree': 0.8,
-            'lambda': 1.0,
-            'alpha': 0.0,
-            'n_estimators': 300,
-            'early_stopping_rounds': 20,
+            'colsample_bylevel': 0.8,
+            'alpha': 0,  # L1 regularization
+            'lambda': 1,  # L2 regularization
             'random_state': 42,
+            'n_estimators': 100,
+            'early_stopping_rounds': 10,
             'verbosity': 1
         }
 
@@ -424,13 +425,13 @@ def main():
         # Prepare data splits
         X_train, X_val, X_test, y_train, y_val, y_test = trainer.prepare_data_splits(X, y)
 
-        # Hyperparameter tuning DISABLED - use default params to prevent overfitting
-        logger.info("Using default XGBoost parameters (hyperparameter tuning disabled)")
-        params = trainer.get_default_xgboost_params()
+        # Hyperparameter tuning (optional - can be skipped for speed)
+        logger.info("Performing hyperparameter tuning...")
+        best_params = trainer.hyperparameter_tuning(X_train, y_train, X_val, y_val)
 
-        # Train final model with default params
-        logger.info("Training model...")
-        model = trainer.train_model(X_train, y_train, X_val, y_val, params)
+        # Train final model
+        logger.info("Training final model...")
+        model = trainer.train_model(X_train, y_train, X_val, y_val, best_params)
 
         # Evaluate model
         metrics, cm = trainer.evaluate_model(model, X_test, y_test)

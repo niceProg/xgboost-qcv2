@@ -170,8 +170,8 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         # For paper/live notifications, set these in Initialize():
         self.enable_live_notifications = True
         self.notify_channel = "Telegram"  # "Debug" | "Telegram" | "Webhook" | "Email" | "Sms"
-        self.telegram_token = "8306719491:AAHNS7HT-pjMUGlcXMA_5SEffd6zPd2X6U0"
-        self.telegram_chat_id = "-4978819951"
+        self.telegram_token = "7477089893:AAH5MJX7dEsDxGUWhgnwjNMlq3KJ2UOndOg"
+        self.telegram_chat_id = "-1003348916328"
         self.webhook_url = ""
         self.email_to = ""
         self.sms_number = ""
@@ -620,10 +620,10 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
     # LOAD DATASET SUMMARY FROM API
     # =========================================================
     def LoadDatasetSummaryFromAPI(self):
-        """Load dataset summary from XGBoost API."""
+        """Load dataset summary from XGBoost API (futures endpoint)."""
         for attempt in range(self.api_retry_count):
             try:
-                url = f"{self.api_base_url}/api/v1/latest/dataset-summary"
+                url = f"{self.api_base_url}/api/v1/futures/latest/dataset-summary"
                 self.Debug(f"Fetching dataset summary from: {url}")
 
                 response = requests.get(url, timeout=self.api_timeout)
