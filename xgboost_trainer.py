@@ -117,6 +117,64 @@ class XGBoostTrainer:
             'verbosity': 1
         }
 
+    def calculate_scale_pos_weight(self, y: pd.Series) -> float:
+        """Calculate scale_pos_weight for imbalanced classes."""
+        pos_count = (y == 1).sum()
+        neg_count = (y == 0).sum()
+
+        if pos_count == 0:
+            return 1.0
+
+        scale = neg_count / pos_count
+        logger.info(f"Class imbalance - Negative: {neg_count}, Positive: {pos_count}, scale_pos_weight: {scale:.2f}")
+        return scale
+
+    def select_features(self, X: pd.DataFrame, y: pd.Series,
+                       importance_threshold: float = 0.01) -> tuple:
+        """
+        Feature selection using quick XGBoost to find importance.
+        Drops features with importance below threshold (default 1%).
+
+        Returns:
+            X_selected: DataFrame with selected features only
+            selected_features: List of selected feature names
+        """
+        logger.info(f"Performing feature selection (threshold={importance_threshold*100:.1f}%)...")
+
+        # Train quick model for feature importance
+        quick_params = {
+            'objective': 'binary:logistic',
+            'eval_metric': ['logloss', 'auc'],
+            'learning_rate': 0.1,
+            'max_depth': 4,  # Smaller for speed
+            'n_estimators': 30,  # Fewer trees for speed
+            'random_state': 42,
+            'verbosity': 0
+        }
+
+        quick_model = xgb.XGBClassifier(**quick_params)
+        quick_model.fit(X, y)
+
+        # Get feature importance
+        importance = pd.DataFrame({
+            'feature': X.columns,
+            'importance': quick_model.feature_importances_
+        }).sort_values('importance', ascending=False)
+
+        # Select features above threshold
+        selected_features = importance[importance['importance'] >= importance_threshold]['feature'].tolist()
+        dropped_features = importance[importance['importance'] < importance_threshold]['feature'].tolist()
+
+        logger.info(f"Feature selection: {len(X.columns)} -> {len(selected_features)} features")
+        logger.info(f"Dropped {len(dropped_features)} low-importance features")
+
+        if dropped_features:
+            logger.info(f"Dropped features (importance < {importance_threshold*100:.1f}%):")
+            for feat, imp in zip(dropped_features, importance[importance['importance'] < importance_threshold]['importance']):
+                logger.info(f"  {feat}: {imp*100:.3f}%")
+
+        return X[selected_features], selected_features
+
     def train_model(self, X_train: pd.DataFrame, y_train: pd.Series,
                    X_val: pd.DataFrame, y_val: pd.Series,
                    params: dict = None) -> xgb.XGBClassifier:
@@ -125,6 +183,10 @@ class XGBoostTrainer:
 
         if params is None:
             params = self.get_default_xgboost_params()
+
+        # Add scale_pos_weight for class imbalance (Quick Win #3)
+        if 'scale_pos_weight' not in params:
+            params['scale_pos_weight'] = self.calculate_scale_pos_weight(y_train)
 
         logger.info(f"Using parameters: {params}")
 
@@ -421,6 +483,10 @@ def main():
         # Load training data
         logger.info("Loading training data...")
         X, y = trainer.load_training_data()
+
+        # Quick Win #4: Feature selection (drop features < 1% importance)
+        X, selected_features = trainer.select_features(X, y, importance_threshold=0.01)
+        trainer.feature_names = selected_features  # Update feature names
 
         # Prepare data splits
         X_train, X_val, X_test, y_train, y_val, y_test = trainer.prepare_data_splits(X, y)

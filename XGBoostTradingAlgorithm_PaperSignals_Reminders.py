@@ -80,6 +80,8 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.SetBenchmark(self.symbol)
 
         # ===== Feature config =====
+        # IMPORTANT: QuantConnect only has price data, not futures data (funding, OI, etc.)
+        # This means QC can only use 17 price features vs 105 features used in training
         self.available_features = [
             "price_open", "price_high", "price_low", "price_close", "price_volume_usd",
             "price_close_return_1", "price_close_return_5", "price_log_return",
@@ -89,8 +91,20 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
             "price_body_size",
         ]
 
-        # Offline model full feature list (fallback ordering)
-        self.model_features = [
+        # Expected feature order - should match training model
+        # For price-only model (17 features) - use this if training with price features only
+        self.model_features_price_only = [
+            "price_open", "price_high", "price_low", "price_close", "price_volume_usd",
+            "price_close_return_1", "price_close_return_5", "price_log_return",
+            "price_rolling_vol_5", "price_true_range", "price_close_mean_5",
+            "price_close_std_5", "price_volume_mean_10", "price_volume_zscore",
+            "price_volume_change", "price_wick_upper", "price_wick_lower",
+            "price_body_size",
+        ]
+
+        # Full futures feature list (105 features) - for reference only
+        # NOTE: These features are NOT available in QuantConnect
+        self.model_features_futures_full = [
             "price_open","price_high","price_low","price_close","price_volume_usd",
             "funding_open","funding_high","funding_low","funding_close",
             "basis_open_basis","basis_close_basis","basis_open_change","basis_close_change",
@@ -110,6 +124,9 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
             "ls_top_ratio","ls_top_zscore","ls_top_delta","ls_top_vs_global",
             "cross_funding_price","cross_ls_price",
         ]
+
+        # Use price-only features by default (QuantConnect compatible)
+        self.model_features = self.model_features_price_only
 
         # Model metadata
         self.strategy_name = "Metode ABC"
@@ -134,6 +151,13 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
                 self.Debug("Backtest mode: Using simulated model")
             self.model_n_features = len(self.model_features)
             self.expected_feature_order = list(self.model_features)
+
+        # WARNING: Feature mismatch check
+        if self.model is not None and self.model_n_features and self.model_n_features > 20:
+            self.Debug(f"⚠️ WARNING: Model expects {self.model_n_features} features (futures model)")
+            self.Debug(f"⚠️ QuantConnect only has {len(self.model_features)} price features available")
+            self.Debug(f"⚠️ This mismatch will cause poor performance!")
+            self.Debug(f"⚠️ Solution: Either train price-only model or use external API signals")
 
         # ===== Rolling window =====
         self.window_size = 60
@@ -1107,4 +1131,9 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
 
     def OnEndOfAlgorithm(self):
         self.Debug(f"Final Portfolio Value: {self.Portfolio.TotalPortfolioValue:.2f}")
-        self.Debug("NOTE: Missing non-price features are set to 0; results won't match offline full-feature backtests.")
+        self.Debug("=== IMPORTANT NOTES ===")
+        self.Debug("1. This algorithm uses 17 price features only")
+        self.Debug("2. Training model may use 105 features (futures data)")
+        self.Debug("3. For best results, train price-only model or use external API signals")
+        self.Debug("4. Contact: Set model_features to match training feature list")
+        self.Debug("=======================")
