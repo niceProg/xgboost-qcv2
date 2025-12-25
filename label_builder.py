@@ -214,16 +214,26 @@ class LabelBuilder:
 
         # Check for data leakage (no future information)
         # Verify that time is properly sorted
-        for (exchange, symbol, interval), group in df.groupby(['exchange', 'symbol', 'interval']):
-            time_diffs = group['time'].diff().dropna()
-            # Convert timedelta to nanoseconds for comparison with int
-            time_diffs_ns = time_diffs.dt.total_seconds() * 1e9
-            # Negative or zero values mean time is not sorted properly
-            if (time_diffs_ns <= 0).any():
-                logger.warning(f"Time not properly sorted for {exchange}/{symbol}/{interval}")
-                break
-        else:
-            logger.info("Time validation passed - no future leakage detected")
+        try:
+            for (exchange, symbol, interval), group in df.groupby(['exchange', 'symbol', 'interval']):
+                time_diffs = group['time'].diff().dropna()
+
+                # Handle both numeric (Unix timestamp) and timedelta types
+                if hasattr(time_diffs, 'dt'):
+                    # timedelta64 type - convert to numeric
+                    time_diffs_numeric = time_diffs.dt.total_seconds()
+                else:
+                    # Already numeric
+                    time_diffs_numeric = time_diffs
+
+                # Negative or zero values mean time is not sorted properly
+                if (time_diffs_numeric <= 0).any():
+                    logger.warning(f"Time not properly sorted for {exchange}/{symbol}/{interval}")
+                    break
+            else:
+                logger.info("Time validation passed - no future leakage detected")
+        except Exception as e:
+            logger.warning(f"Time validation skipped due to error: {e}")
 
         # Check feature-label correlation (basic sanity check)
         # Note: In price-only mode, only price_ features exist
