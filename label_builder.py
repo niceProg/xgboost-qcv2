@@ -84,7 +84,7 @@ class LabelBuilder:
             logger.error(f"Error loading features: {e}")
             sys.exit(1)
 
-    def create_binary_labels(self, df: pd.DataFrame, trend_window: int = 8, threshold: float = 0.003) -> pd.DataFrame:
+    def create_binary_labels(self, df: pd.DataFrame, trend_window: int = 8, threshold: float = 0.001) -> pd.DataFrame:
         """
         Create binary labels based on multi-bar trend prediction.
 
@@ -94,7 +94,7 @@ class LabelBuilder:
         Args:
             df: DataFrame with price data
             trend_window: Number of bars to look ahead (default: 8 for 8-hour trend)
-            threshold: Minimum price change to consider as valid signal (default: 0.3%)
+            threshold: Minimum price change to consider as valid signal (default: 0.1%)
                       Smaller moves below this are considered "noise" and excluded
 
         Returns:

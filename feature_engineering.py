@@ -134,11 +134,64 @@ class FeatureEngineer:
         df['price_close_mean_5'] = df.groupby(['exchange', 'symbol', 'interval'])['price_close'].transform(lambda x: x.rolling(5).mean())
         df['price_close_std_5'] = df.groupby(['exchange', 'symbol', 'interval'])['price_close'].transform(lambda x: x.rolling(5).std())
 
-        # Volume features
+        # ========== NEW PREDICTIVE FEATURES ==========
+
+        # RSI (Relative Strength Index) - 14 period standard
+        def calculate_rsi(prices, period=14):
+            """Calculate RSI for a series of prices."""
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi
+
+        df['price_rsi_14'] = df.groupby(['exchange', 'symbol', 'interval'])['price_close'].transform(
+            lambda x: calculate_rsi(x, period=14)
+        )
+
+        # EMA for MACD calculation
+        df['price_ema_12'] = df.groupby(['exchange', 'symbol', 'interval'])['price_close'].transform(
+            lambda x: x.ewm(span=12, adjust=False).mean()
+        )
+        df['price_ema_26'] = df.groupby(['exchange', 'symbol', 'interval'])['price_close'].transform(
+            lambda x: x.ewm(span=26, adjust=False).mean()
+        )
+
+        # MACD line
+        df['price_macd'] = df['price_ema_12'] - df['price_ema_26']
+
+        # MACD Signal line (9-period EMA of MACD)
+        df['price_macd_signal'] = df.groupby(['exchange', 'symbol', 'interval'])['price_macd'].transform(
+            lambda x: x.ewm(span=9, adjust=False).mean()
+        )
+
+        # MACD Histogram (MACD - Signal)
+        df['price_macd_histogram'] = df['price_macd'] - df['price_macd_signal']
+
+        # MACD Crossover signals
+        df['price_macd_bullish_cross'] = (
+            (df['price_macd'] > df['price_macd_signal']) &
+            (df.groupby(['exchange', 'symbol', 'interval'])['price_macd'].shift(1) <=
+             df.groupby(['exchange', 'symbol', 'interval'])['price_macd_signal'].shift(1))
+        ).astype(int)
+
+        df['price_macd_bearish_cross'] = (
+            (df['price_macd'] < df['price_macd_signal']) &
+            (df.groupby(['exchange', 'symbol', 'interval'])['price_macd'].shift(1) >=
+             df.groupby(['exchange', 'symbol', 'interval'])['price_macd_signal'].shift(1))
+        ).astype(int)
+
+        # ========== END NEW PREDICTIVE FEATURES ==========
+
+        # Volume features (with spike detection)
         df['price_volume_mean_10'] = df.groupby(['exchange', 'symbol', 'interval'])['price_volume_usd'].transform(lambda x: x.rolling(10).mean())
         volume_std_10 = df.groupby(['exchange', 'symbol', 'interval'])['price_volume_usd'].transform(lambda x: x.rolling(10).std())
         df['price_volume_zscore'] = (df['price_volume_usd'] - df['price_volume_mean_10']) / volume_std_10
         df['price_volume_change'] = df.groupby(['exchange', 'symbol', 'interval'])['price_volume_usd'].pct_change(1)
+
+        # Volume spike detection (> 2x mean = unusual activity)
+        df['price_volume_spike'] = (df['price_volume_usd'] > df['price_volume_mean_10'] * 2).astype(int)
 
         # Candlestick features
         df['price_wick_upper'] = df['price_high'] - np.maximum(df['price_open'], df['price_close'])
@@ -149,7 +202,11 @@ class FeatureEngineer:
             'price_close_return_1', 'price_close_return_5', 'price_log_return',
             'price_rolling_vol_5', 'price_true_range', 'price_close_mean_5',
             'price_close_std_5', 'price_volume_mean_10', 'price_volume_zscore',
-            'price_volume_change', 'price_wick_upper', 'price_wick_lower', 'price_body_size'
+            'price_volume_change', 'price_wick_upper', 'price_wick_lower', 'price_body_size',
+            # New predictive features
+            'price_rsi_14', 'price_ema_12', 'price_ema_26', 'price_macd',
+            'price_macd_signal', 'price_macd_histogram', 'price_macd_bullish_cross',
+            'price_macd_bearish_cross', 'price_volume_spike'
         ])
 
         return df
@@ -170,9 +227,9 @@ class FeatureEngineer:
         df['funding_std_24'] = df.groupby(['exchange', 'symbol', 'interval'])['funding_close'].transform(lambda x: x.rolling(24).std())
         df['funding_zscore'] = (df['funding_close'] - df['funding_mean_24']) / df['funding_std_24']
 
-        # Extreme indicators
-        df['funding_extreme_positive'] = (df['funding_close'] > 0.015).astype(int)  # > 1.5x standard rate
-        df['funding_extreme_negative'] = (df['funding_close'] < -0.015).astype(int)  # < -1.5x standard rate
+        # Extreme indicators (> 1% funding rate = overextended longs/shorts)
+        df['funding_extreme_positive'] = (df['funding_close'] > 0.01).astype(int)  # > 1% = overextended longs
+        df['funding_extreme_negative'] = (df['funding_close'] < -0.01).astype(int)  # < -1% = overextended shorts
 
         self.feature_columns.extend([
             'funding_norm', 'funding_mean_24', 'funding_std_24',

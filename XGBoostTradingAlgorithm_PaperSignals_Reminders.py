@@ -179,7 +179,8 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         # Model predicts: "Will price move >= 0.3% in 8 hours?"
 
         # Prediction thresholds - model confidence for entry/exit
-        self.prediction_buy_threshold = 0.40   # Buy when prob >= 40%
+        # LOWERED for testing - to see if model actually makes predictions
+        self.prediction_buy_threshold = 0.35   # Buy when prob >= 35% (lowered from 40%)
         self.prediction_sell_threshold = 0.30   # Exit when prob <= 30%
         self.position_size_pct = 0.50           # 50% capital per trade
 
@@ -1185,9 +1186,16 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
     # =========================================================
     def TradeLogic(self, pred: float):
         qty = self.Portfolio[self.symbol].Quantity
+        buy_th = float(self.prediction_buy_threshold)
+        sell_th = float(self.prediction_sell_threshold)
+
+        # Debug: Log prediction every 12 hours
+        if self.pred_debug_counter % 12 == 0:
+            self.Debug(f"[TRADE] pred={pred:.3f} buy_th={buy_th:.2f} sell_th={sell_th:.2f} qty={qty} pending_entry={self.pending_entry} pending_exit={self.pending_exit}")
+        self.pred_debug_counter += 1
 
         # ENTRY
-        if pred > self.prediction_buy_threshold and qty <= 0 and not self.pending_entry and not self.pending_exit:
+        if pred > buy_th and qty <= 0 and not self.pending_entry and not self.pending_exit:
             self.pending_entry = True
             # Note: Fill-based entry signal will be sent in OnOrderEvent
             self.SetHoldings(self.symbol, self.position_size_pct)
@@ -1197,7 +1205,7 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
             self.Debug(f"BUY SetHoldings({self.position_size_pct:.0%}) pred={pred:.3f} est_entry={self.entry_price:.2f}")
 
         # EXIT by prediction (with minimum holding period check)
-        elif pred < self.prediction_sell_threshold and qty > 0 and not self.pending_exit:
+        elif pred < sell_th and qty > 0 and not self.pending_exit:
             # Check minimum holding period before allowing prediction-based exit
             hold_ok = True
             try:
@@ -1267,7 +1275,7 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
                 return True
 
             qty = self.Portfolio[self.symbol].Quantity
-            if qty <= 0 or self.entry_time is None:
+            if qty <= 0 or self.entry_time is None or self.entry_price is None:
                 return False
 
             # Get max_hold_bars from settings (default 8)
@@ -1280,8 +1288,11 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
                 self.last_exit_reason = "TIME"
                 self.Liquidate(self.symbol)
 
-                # Calculate PnL at exit
-                pnl_pct = (price - self.entry_price) / self.entry_price if self.entry_price != 0 else 0.0
+                # Calculate PnL at exit (safely handle None)
+                if self.entry_price is not None and self.entry_price != 0:
+                    pnl_pct = (price - self.entry_price) / self.entry_price
+                else:
+                    pnl_pct = 0.0
                 self.Debug(f"MAX HOLD EXIT ({max_hold_hours}h) held={hold_duration} pnl={pnl_pct:.2%}")
                 return True
 

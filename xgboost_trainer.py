@@ -33,12 +33,13 @@ logger = logging.getLogger(__name__)
 class XGBoostTrainer:
     """Train XGBoost model for trend prediction."""
 
-    def __init__(self, data_filter: DataFilter, output_dir: str = './output_train'):
+    def __init__(self, data_filter: DataFilter, output_dir: str = './output_train', price_only_mode: bool = False):
         self.data_filter = data_filter
         self.output_dir = Path(output_dir)
         self.model = None
         self.feature_names = None
         self.best_params = None
+        self.price_only_mode = price_only_mode
 
     def load_training_data(self) -> tuple:
         """Load prepared training data."""
@@ -78,23 +79,42 @@ class XGBoostTrainer:
                           test_size: float = 0.2,
                           validation_size: float = 0.2,
                           random_state: int = 42) -> tuple:
-        """Prepare train/validation/test splits with temporal consideration."""
-        logger.info("Preparing data splits...")
+        """
+        Prepare train/validation/test splits with TIME-BASED split.
 
-        # First split: train+val vs test
-        X_temp, X_test, y_temp, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state, stratify=y
-        )
+        For time-series data (futures trading), we MUST split by time, not randomly.
+        Train = oldest 70%, Val = next 10%, Test = newest 20%
 
-        # Second split: train vs val
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_temp, y_temp, test_size=validation_size,
-            random_state=random_state, stratify=y_temp
-        )
+        This prevents data leakage from future into past.
+        """
+        logger.info("Preparing time-based data splits (no random split for time series)...")
 
-        logger.info(f"Train set: {X_train.shape[0]} samples ({y_train.mean():.3f} bullish)")
-        logger.info(f"Validation set: {X_val.shape[0]} samples ({y_val.mean():.3f} bullish)")
-        logger.info(f"Test set: {X_test.shape[0]} samples ({y_test.mean():.3f} bullish)")
+        n_samples = len(X)
+        indices = np.arange(n_samples)
+
+        # Calculate split points
+        # Train: 70%, Val: 10%, Test: 20% (validation_size=0.2 of remaining = 0.2 * 0.8 = 0.16, adjusted to 0.1)
+        train_end = int(n_samples * 0.70)
+        val_end = int(n_samples * 0.80)  # 70% + 10% = 80%
+
+        # Split indices
+        train_idx = indices[:train_end]
+        val_idx = indices[train_end:val_end]
+        test_idx = indices[val_end:]
+
+        # Create splits
+        X_train = X.iloc[train_idx].copy()
+        y_train = y.iloc[train_idx].copy()
+        X_val = X.iloc[val_idx].copy()
+        y_val = y.iloc[val_idx].copy()
+        X_test = X.iloc[test_idx].copy()
+        y_test = y.iloc[test_idx].copy()
+
+        logger.info(f"Time-based split:")
+        logger.info(f"  Train set: {X_train.shape[0]} samples ({y_train.mean():.3f} bullish) - oldest 70%")
+        logger.info(f"  Validation set: {X_val.shape[0]} samples ({y_val.mean():.3f} bullish) - next 10%")
+        logger.info(f"  Test set: {X_test.shape[0]} samples ({y_test.mean():.3f} bullish) - newest 20%")
+        logger.info(f"  Note: No data leakage - test data is strictly future data")
 
         return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -282,7 +302,7 @@ class XGBoostTrainer:
         # Create a copy of params without early_stopping_rounds for CV
         cv_params = params.copy()
         cv_params.pop('early_stopping_rounds', None)
-        cv_params['n_estimators'] = 50  # Use fewer trees for CV to speed up
+        cv_params['n_estimators'] = 100  # Increased from 50 for better CV results
 
         # Perform cross validation
         model = xgb.XGBClassifier(**cv_params)
@@ -306,7 +326,8 @@ class XGBoostTrainer:
 
     def save_model_and_results(self, model: xgb.XGBClassifier,
                              metrics: dict, cv_results: dict,
-                             feature_importance: pd.DataFrame):
+                             feature_importance: pd.DataFrame,
+                             sample_count: int = None):
         """Save model and training results."""
         logger.info("Saving model and results...")
 
@@ -336,6 +357,9 @@ class XGBoostTrainer:
         shutil.copy2(latest_model_path, root_latest_path)
         logger.info(f"Latest model copied to root: {root_latest_path}")
 
+        # Use provided sample_count or fallback to feature count (backward compat)
+        actual_sample_count = sample_count if sample_count is not None else len(self.feature_names)
+
         # Save training results
         results = {
             'model_name': model_name,
@@ -344,7 +368,7 @@ class XGBoostTrainer:
             'metrics': metrics,
             'cross_validation': cv_results,
             'feature_count': len(self.feature_names),
-            'sample_count': len(self.feature_names)
+            'sample_count': actual_sample_count
         }
 
         results_path = self.output_dir / f'training_results_{timestamp}.json'
@@ -473,19 +497,30 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Check for price-only mode
+    price_only_mode = os.getenv('PRICE_ONLY_MODE', 'false').lower() == 'true'
+
     # Create data filter
     data_filter = DataFilter(args)
 
     # Initialize trainer
-    trainer = XGBoostTrainer(data_filter, args.output_dir)
+    trainer = XGBoostTrainer(data_filter, args.output_dir, price_only_mode)
 
     try:
         # Load training data
         logger.info("Loading training data...")
         X, y = trainer.load_training_data()
 
-        # Quick Win #4: Feature selection (drop features < 1% importance)
-        X, selected_features = trainer.select_features(X, y, importance_threshold=0.01)
+        # In price-only mode, skip feature selection to keep all 18 features
+        # This ensures compatibility with QuantConnect which has all 18 features
+        if price_only_mode:
+            logger.info("🔵 PRICE-ONLY MODE: Skipping feature selection to keep all price features")
+            logger.info(f"Using all {X.shape[1]} features for training")
+            selected_features = list(X.columns)
+        else:
+            # Quick Win #4: Feature selection (drop features < 0.5% importance)
+            X, selected_features = trainer.select_features(X, y, importance_threshold=0.005)
+
         trainer.feature_names = selected_features  # Update feature names
 
         # Prepare data splits
@@ -511,7 +546,7 @@ def main():
         cv_results = trainer.cross_validation(X, y)
 
         # Save everything
-        trainer.save_model_and_results(model, metrics, cv_results, feature_importance)
+        trainer.save_model_and_results(model, metrics, cv_results, feature_importance, sample_count=len(X))
 
         logger.info("\n=== Training Complete ===")
         logger.info("Ready for model_evaluation.py")
