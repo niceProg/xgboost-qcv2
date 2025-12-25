@@ -5,9 +5,9 @@ from collections import deque
 import os
 import re
 import joblib
-import requests
 import base64
 import pickle
+import json
 from datetime import datetime, timedelta
 
 # Ensure Binance market is available
@@ -37,20 +37,29 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.api_timeout = 30  # seconds
         self.api_retry_count = 3
 
-        # Skip API calls in backtest mode to prevent network errors
-        self.use_api = self.LiveMode  # Only use API in live/paper trading
+        # ALWAYS use API (both backtest and live/paper trading)
+        self.use_api = True
+
+        # Two-step process: Download first, then load
+        # Step 1: Download from both endpoints
+        self.downloaded_model_data = None
+        self.downloaded_dataset_summary = None
+        try:
+            self.DownloadFromAPI()
+        except Exception as e:
+            self.Debug(f"Failed to download from API: {e}")
 
         self.train_start_date = None
         self.train_end_date = None
 
-        # Only load from API if in live mode
-        if self.use_api:
-            self.LoadDatasetSummaryFromAPI()
-        else:
-            # Use default dates for backtest
+        # Step 2: Load from downloaded data
+        try:
+            self.LoadDatasetSummaryFromDownloaded()
+        except Exception as e:
+            self.Debug(f"Failed to load dataset summary from downloaded: {e}")
+            # Fallback dates
             self.train_start_date = datetime(2024, 1, 1)
             self.train_end_date = datetime(2025, 12, 31)
-            self.Debug("Backtest mode: Using default dates, skipping API calls")
 
         if self.train_start_date and self.train_end_date:
             start_dt = self.train_start_date - timedelta(days=1)
@@ -63,21 +72,31 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
 
         self.SetStartDate(start_dt.year, start_dt.month, start_dt.day)
         self.SetEndDate(end_dt.year, end_dt.month, end_dt.day)
-        self.SetCash(100000)
+        self.SetCash(1000)
 
-        # ===== Symbol =====
-        try:
-            self.crypto = self.AddCrypto("BTCUSDT", Resolution.Hour, Market.Binance)
-        except Exception:
-            try:
-                self.SetBrokerageModel(BrokerageName.Binance)
-                self.crypto = self.AddCrypto("BTCUSDT", Resolution.Hour)
-            except Exception:
-                self.crypto = self.AddCrypto("BTCUSDT", Resolution.Hour)
-                self.Debug("Warning: Using default market, but model expects Binance-like data")
+        # ===== Symbol & Futures Settings =====
+        # For live futures trading, use these settings:
+        # - Set brokerage model for futures
+        # - Configure leverage (1x to 125x)
+        self.SetBrokerageModel(BrokerageName.Binance, AccountType.Margin)
+
+        # Add BTCUSDT with leverage
+        self.crypto = self.AddCrypto("BTCUSDT", Resolution.Hour, Market.Binance)
 
         self.symbol = self.crypto.Symbol
         self.SetBenchmark(self.symbol)
+
+        # ===== Futures Leverage Settings (for live trading) =====
+        # Set leverage for futures (1x to 20x recommended, max 125x)
+        self.leverage = 10  # 10x leverage
+        self.Securities[self.symbol].SetLeverage(self.leverage)
+
+        # ===== Position Sizing =====
+        # For futures: Calculate position size based on leverage
+        # Base position = 80% of capital
+        # With leverage: effective position = 80% * leverage
+        self.base_position_size = 0.50  # 50% of portfolio value
+        self.max_position_value = self.Portfolio.TotalPortfolioValue * self.base_position_size
 
         # ===== Feature config =====
         # IMPORTANT: QuantConnect only has price data, not futures data (funding, OI, etc.)
@@ -136,21 +155,13 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.model_n_features = None
         self.expected_feature_order = None
 
-        # Only try to load model from API if in live/paper mode
-        if self.use_api:
-            try:
-                self.LoadModelFromAPI()
-            except Exception as e:
-                self.Debug(f"API initialization failed, will use fallback: {e}")
-
-        # If model failed to load or not in API mode, set default values
-        if self.model is None:
-            if self.use_api:
-                self.Debug("Model not loaded from API - using default configuration")
-            else:
-                self.Debug("Backtest mode: Using simulated model")
-            self.model_n_features = len(self.model_features)
-            self.expected_feature_order = list(self.model_features)
+        # Step 2: Load model from downloaded data (two-step process)
+        try:
+            self.Debug(f"Loading model from downloaded data")
+            self.LoadModelFromDownloaded()
+        except Exception as e:
+            self.Error(f"Failed to load model from downloaded: {e}")
+            self.Error("Model will be None - no trades will be taken")
 
         # WARNING: Feature mismatch check
         if self.model is not None and self.model_n_features and self.model_n_features > 20:
@@ -163,13 +174,18 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.window_size = 60
         self.price_window = deque(maxlen=self.window_size)
 
-        # ===== Trading parameters =====
-        self.prediction_buy_threshold = 0.55
-        self.prediction_sell_threshold = 0.45
-        self.position_size_pct = 0.80
+        # ===== Trading parameters (OPTIMIZED for more trade frequency) =====
+        # Prediction thresholds - more aggressive entry
+        self.prediction_buy_threshold = 0.40   # Buy when prob >= 40% (lowered for more trades)
+        self.prediction_sell_threshold = 0.30   # Exit when prob <= 30%
+        self.position_size_pct = 0.50           # 50% capital per trade (safer with more trades)
 
-        self.stop_loss_pct = 0.05
-        self.take_profit_pct = 0.10
+        # Stop Loss & Take Profit - more conservative for higher WR
+        self.stop_loss_pct = 0.05               # 5% stop loss (cut losses early)
+        self.take_profit_pct = 0.10             # 10% take profit (realistic target - was 70% too high!)
+
+        # Minimum holding period - prevent whipsaw exits
+        self.min_hold_bars = 1                  # Hold minimum 1 hour before prediction-based exit
 
         # Entry/Exit tracking
         self.entry_price = None
@@ -181,9 +197,9 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.last_exit_reason = None  # "TP" | "SL" | "PRED" | "RISK"
 
         # ===== Risk management =====
-        self.max_drawdown_pct = 0.20
+        self.max_drawdown_pct = 0.25           # 25% max drawdown (dari 20%)
         self.high_watermark = self.Portfolio.TotalPortfolioValue
-        self.cooldown_period = timedelta(days=7)
+        self.cooldown_period = timedelta(days=1)  # 1 hari cooldown (dari 7 hari)
         self.trading_paused_until = None
 
         # Prevent same-bar re-entry
@@ -643,148 +659,236 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
     # =========================================================
     # LOAD DATASET SUMMARY FROM API
     # =========================================================
-    def LoadDatasetSummaryFromAPI(self):
-        """Load dataset summary from XGBoost API (futures endpoint)."""
+    def _download_json(self, url: str):
+        """Download JSON from URL using QuantConnect's built-in Download method."""
+        try:
+            s = self.Download(url)
+            if s is None:
+                return None
+            txt = str(s).strip()
+            if not txt:
+                return None
+            return json.loads(txt)
+        except Exception as e:
+            self.Debug(f"[HTTP] JSON download failed url={url} err={e}")
+            return None
+
+    # =========================================================
+    # STEP 1: DOWNLOAD FROM API (Two-step process)
+    # =========================================================
+    def DownloadFromAPI(self):
+        """
+        Step 1: Download both model and dataset summary from API endpoints.
+        Store them temporarily for later loading.
+        """
+        self.Debug("=== Step 1: Downloading from API ===")
+
+        # Download dataset summary
         for attempt in range(self.api_retry_count):
             try:
                 url = f"{self.api_base_url}/api/v1/futures/latest/dataset-summary"
-                self.Debug(f"Fetching dataset summary from: {url}")
+                self.Debug(f"Downloading dataset summary from: {url}")
 
-                response = requests.get(url, timeout=self.api_timeout)
-                response.raise_for_status()
+                data = self._download_json(url)
 
-                data = response.json()
+                if data is None:
+                    self.Debug(f"API request failed (attempt {attempt + 1}/{self.api_retry_count})")
+                    if attempt == self.api_retry_count - 1:
+                        self.Error("Failed to download dataset summary after all retries")
+                    continue
 
                 if not data.get("success", False):
                     self.Debug("Dataset summary not available or success=false")
-                    # Use default dates
-                    self.train_start_date = datetime(2024, 1, 1)
-                    self.train_end_date = datetime(2025, 12, 31)
-                    return
+                    continue
 
-                # Decode base64 summary data if available
-                summary_data = data.get("summary_data_base64")
-                if summary_data:
-                    try:
-                        decoded_text = base64.b64decode(summary_data).decode('utf-8')
-
-                        # Parse time range from the decoded text
-                        m = re.search(r"Time range:\s*(.+?)\s*to\s*(.+)", decoded_text)
-                        if not m:
-                            self.Error("Could not parse 'Time range: ... to ...' in dataset summary")
-                            # Use default dates
-                            self.train_start_date = datetime(2024, 1, 1)
-                            self.train_end_date = datetime(2025, 12, 31)
-                            return
-
-                        start_raw = m.group(1).strip()
-                        end_raw = m.group(2).strip()
-                        dt_format = "%Y-%m-%d %H:%M:%S"
-                        start_dt = datetime.strptime(start_raw, dt_format)
-                        end_dt = datetime.strptime(end_raw, dt_format)
-
-                        self.train_start_date = datetime(start_dt.year, start_dt.month, start_dt.day)
-                        self.train_end_date = datetime(end_dt.year, end_dt.month, end_dt.day)
-
-                        self.Debug(f"Loaded dataset summary: {self.train_start_date} to {self.train_end_date}")
-                    except Exception as decode_error:
-                        self.Error(f"Error decoding dataset summary: {decode_error}")
-                        # Use default dates
-                        self.train_start_date = datetime(2024, 1, 1)
-                        self.train_end_date = datetime(2025, 12, 31)
-                else:
-                    self.Debug("No dataset summary data available, using default dates")
-                    self.train_start_date = datetime(2024, 1, 1)
-                    self.train_end_date = datetime(2025, 12, 31)
-
-                return
-
-            except requests.exceptions.RequestException as e:
-                self.Debug(f"API request failed (attempt {attempt + 1}/{self.api_retry_count}): {e}")
-                if attempt == self.api_retry_count - 1:
-                    self.Error("Failed to fetch dataset summary after all retries, using default dates")
-                    self.train_start_date = datetime(2024, 1, 1)
-                    self.train_end_date = datetime(2025, 12, 31)
-            except Exception as e:
-                self.Error(f"Error loading dataset summary from API: {e}")
-                self.train_start_date = None
-                self.train_end_date = None
+                # Store downloaded data
+                self.downloaded_dataset_summary = data
+                self.Debug("Dataset summary downloaded successfully")
                 break
 
-    # =========================================================
-    # LOAD MODEL FROM API
-    # =========================================================
-    def LoadModelFromAPI(self):
-        """Load XGBoost model from API (futures endpoint)."""
+            except Exception as e:
+                self.Debug(f"API request failed (attempt {attempt + 1}/{self.api_retry_count}): {e}")
+                if attempt == self.api_retry_count - 1:
+                    self.Error("Failed to download dataset summary after all retries")
+
+        # Download model
         for attempt in range(self.api_retry_count):
             try:
                 url = f"{self.api_base_url}/api/v1/futures/latest/model"
-                self.Debug(f"Fetching model from: {url}")
+                self.Debug(f"Downloading model from: {url}")
 
-                response = requests.get(url, timeout=self.api_timeout)
-                response.raise_for_status()
+                data = self._download_json(url)
 
-                data = response.json()
+                if data is None:
+                    self.Debug(f"API request failed (attempt {attempt + 1}/{self.api_retry_count})")
+                    if attempt == self.api_retry_count - 1:
+                        self.Error("Failed to download model after all retries")
+                    continue
 
                 if not data.get("success", False):
                     self.Error(f"Failed to get model: {data.get('message', 'Unknown error')}")
-                    return
+                    continue
 
-                # Get model data from base64
-                model_data_b64 = data.get("model_data_base64")
-                if not model_data_b64:
-                    self.Error("No model data in response")
-                    return
+                # Store downloaded data
+                self.downloaded_model_data = data
+                self.Debug("Model downloaded successfully")
+                break
 
-                # Decode and load model
-                try:
-                    model_bytes = base64.b64decode(model_data_b64)
-                    self.model = pickle.loads(model_bytes)
-                    self.Debug("Successfully loaded XGBoost model from API")
-
-                    # Get feature names from API response if available
-                    api_feature_names = data.get("feature_names", [])
-                    if api_feature_names:
-                        self.expected_feature_order = list(api_feature_names)
-                        self.model_n_features = len(self.expected_feature_order)
-                        self.Debug(f"Using feature names from API: {self.model_n_features} features")
-                    else:
-                        # Try to get from model itself
-                        self.model_n_features = None
-                        self.expected_feature_order = None
-                        try:
-                            if hasattr(self.model, "n_features_in_"):
-                                self.model_n_features = int(self.model.n_features_in_)
-
-                            booster = self.model.get_booster() if hasattr(self.model, "get_booster") else None
-                            if booster is not None and getattr(booster, "feature_names", None):
-                                self.expected_feature_order = list(booster.feature_names)
-                                self.model_n_features = len(self.expected_feature_order)
-                        except Exception as inner:
-                            self.Debug(f"Could not infer model feature metadata: {inner}")
-
-                        # Fallback to default feature list
-                        if self.expected_feature_order is None:
-                            self.expected_feature_order = list(self.model_features)
-                            self.Debug("Using fallback feature list")
-
-                        if self.model_n_features is None:
-                            self.model_n_features = len(self.expected_feature_order)
-
-                    self.Debug(f"Model expects {self.model_n_features} features; order_len={len(self.expected_feature_order)}")
-                    return
-
-                except Exception as decode_error:
-                    self.Error(f"Error decoding model data: {decode_error}")
-                    return
-
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 self.Debug(f"API request failed (attempt {attempt + 1}/{self.api_retry_count}): {e}")
                 if attempt == self.api_retry_count - 1:
-                    self.Error("Failed to fetch model after all retries")
-            except Exception as e:
-                self.Error(f"Error loading model from API: {e}")
-                break
+                    self.Error("Failed to download model after all retries")
+
+        self.Debug("=== Step 1 Complete: Downloads finished ===")
+
+    # =========================================================
+    # STEP 2: LOAD FROM DOWNLOADED DATA (Two-step process)
+    # =========================================================
+    def LoadDatasetSummaryFromDownloaded(self):
+        """Step 2: Load dataset summary from previously downloaded data."""
+        self.Debug("=== Step 2: Loading dataset summary from downloaded data ===")
+
+        # Check if we have downloaded data
+        if self.downloaded_dataset_summary is None:
+            self.Debug("No downloaded dataset summary available, using default dates")
+            self.train_start_date = datetime(2024, 1, 1)
+            self.train_end_date = datetime(2025, 12, 31)
+            return
+
+        try:
+            data = self.downloaded_dataset_summary
+
+            # Decode base64 summary data if available
+            summary_data = data.get("summary_data_base64")
+            if summary_data:
+                try:
+                    decoded_text = base64.b64decode(summary_data).decode('utf-8')
+                    self.Debug(f"Decoded dataset summary: {len(decoded_text)} bytes")
+
+                    # Try multiple patterns for time range parsing
+                    # Pattern 1: "Time range: ... to ..." (original format)
+                    m = re.search(r"Time range:\s*(.+?)\s*to\s*(.+)", decoded_text)
+
+                    # Pattern 2: "Start: ..." and "End: ..." (new format from qc_spot_v4)
+                    if not m:
+                        m_start = re.search(r"- Start:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})", decoded_text, re.MULTILINE)
+                        m_end = re.search(r"- End:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})", decoded_text, re.MULTILINE)
+                        if m_start and m_end:
+                            start_raw = m_start.group(1).strip()
+                            end_raw = m_end.group(1).strip()
+                        else:
+                            # Both patterns failed
+                            self.Error("Could not parse time range in dataset summary (tried both patterns)")
+                            self.train_start_date = datetime(2024, 1, 1)
+                            self.train_end_date = datetime(2025, 12, 31)
+                            return
+                    else:
+                        # Pattern 1 matched
+                        start_raw = m.group(1).strip()
+                        end_raw = m.group(2).strip()
+
+                    dt_format = "%Y-%m-%d %H:%M:%S"
+                    start_dt = datetime.strptime(start_raw, dt_format)
+                    end_dt = datetime.strptime(end_raw, dt_format)
+
+                    self.train_start_date = datetime(start_dt.year, start_dt.month, start_dt.day)
+                    self.train_end_date = datetime(end_dt.year, end_dt.month, end_dt.day)
+
+                    self.Debug(f"Loaded dataset summary: {self.train_start_date} to {self.train_end_date}")
+                except Exception as decode_error:
+                    self.Error(f"Error decoding dataset summary: {decode_error}")
+                    self.train_start_date = datetime(2024, 1, 1)
+                    self.train_end_date = datetime(2025, 12, 31)
+            else:
+                self.Debug("No dataset summary data available, using default dates")
+                self.train_start_date = datetime(2024, 1, 1)
+                self.train_end_date = datetime(2025, 12, 31)
+
+        except Exception as e:
+            self.Error(f"Error loading dataset summary from downloaded: {e}")
+            self.train_start_date = datetime(2024, 1, 1)
+            self.train_end_date = datetime(2025, 12, 31)
+
+    # =========================================================
+    # STEP 2: LOAD MODEL FROM DOWNLOADED DATA (Two-step process)
+    # =========================================================
+    def LoadModelFromDownloaded(self):
+        """Step 2: Load XGBoost model from previously downloaded data."""
+        self.Debug("=== Step 2: Loading model from downloaded data ===")
+
+        # Check if we have downloaded data
+        if self.downloaded_model_data is None:
+            self.Error("No downloaded model data available")
+            return
+
+        try:
+            data = self.downloaded_model_data
+
+            if not data.get("success", False):
+                self.Error(f"Failed to get model: {data.get('message', 'Unknown error')}")
+                return
+
+            # Get model data from base64
+            model_data_b64 = data.get("model_data_base64")
+            if not model_data_b64:
+                self.Error("No model data in response")
+                return
+
+            # Decode and load model
+            try:
+                model_bytes = base64.b64decode(model_data_b64)
+                self.model = pickle.loads(model_bytes)
+                self.Debug("Successfully loaded XGBoost model from downloaded data")
+
+                # Get feature names from API response if available
+                api_feature_names = data.get("feature_names", [])
+                if api_feature_names:
+                    self.expected_feature_order = list(api_feature_names)
+                    self.model_n_features = len(self.expected_feature_order)
+                    self.Debug(f"Using feature names from API: {self.model_n_features} features")
+                else:
+                    # Try to get from model itself
+                    self.model_n_features = None
+                    self.expected_feature_order = None
+                    try:
+                        if hasattr(self.model, "n_features_in_"):
+                            self.model_n_features = int(self.model.n_features_in_)
+
+                        booster = self.model.get_booster() if hasattr(self.model, "get_booster") else None
+                        if booster is not None and getattr(booster, "feature_names", None):
+                            self.expected_feature_order = list(booster.feature_names)
+                            self.model_n_features = len(self.expected_feature_order)
+                    except Exception as inner:
+                        self.Debug(f"Could not infer model feature metadata: {inner}")
+
+                    # Fallback to default feature list
+                    if self.expected_feature_order is None:
+                        self.expected_feature_order = list(self.model_features)
+                        self.Debug("Using fallback feature list")
+
+                    if self.model_n_features is None:
+                        self.model_n_features = len(self.expected_feature_order)
+
+                self.Debug(f"Model expects {self.model_n_features} features; order_len={len(self.expected_feature_order)}")
+                return
+
+            except Exception as decode_error:
+                self.Error(f"Error decoding model data: {decode_error}")
+                return
+
+        except Exception as e:
+            self.Error(f"Error loading model from downloaded: {e}")
+
+    # =========================================================
+    # OLD METHODS (Kept for reference, no longer used)
+    # =========================================================
+    def LoadDatasetSummaryFromAPI(self):
+        """[DEPRECATED] Load dataset summary from API. Use DownloadFromAPI + LoadDatasetSummaryFromDownloaded instead."""
+        pass
+
+    def LoadModelFromAPI(self):
+        """[DEPRECATED] Load model from API. Use DownloadFromAPI + LoadModelFromDownloaded instead."""
+        pass
 
     # =========================================================
     # ORDER EVENTS (Signals should be based on fills)
@@ -1030,10 +1134,12 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
                     v = 0.0
                 vec.append(v)
 
-            if len(vec) > self.model_n_features:
-                vec = vec[:self.model_n_features]
-            elif len(vec) < self.model_n_features:
-                vec.extend([0.0] * (self.model_n_features - len(vec)))
+            # Adjust feature vector size if model_n_features is known
+            if self.model_n_features is not None:
+                if len(vec) > self.model_n_features:
+                    vec = vec[:self.model_n_features]
+                elif len(vec) < self.model_n_features:
+                    vec.extend([0.0] * (self.model_n_features - len(vec)))
 
             return np.asarray(vec, dtype=float).reshape(1, -1)
         except Exception as e:
@@ -1044,32 +1150,23 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
     # PREDICT
     # =========================================================
     def Predict(self, feature_array: np.ndarray):
+        """Call XGBoost model for prediction. Returns None if model not available."""
         try:
             if self.model is None:
-                if not self.use_api:
-                    # In backtest mode, generate simple mock predictions based on price momentum
-                    # This creates some trading activity for testing purposes
-                    import random
-                    # Create a pseudo-random but deterministic prediction based on time
-                    random.seed(int(self.Time.timestamp() / 3600))  # Seed changes every hour
-                    mock_pred = random.uniform(0.3, 0.7)
-
-                    # Occasional strong signals
-                    if random.random() < 0.1:  # 10% chance
-                        mock_pred = random.choice([0.2, 0.8])
-
-                    return float(mock_pred)
-                else:
-                    # Live mode but model failed - return neutral
-                    self.Debug("Model not available in live mode, returning neutral prediction (0.5)")
-                    return 0.5
+                # Model not loaded - no trading (same as ObjectStore version)
+                if self.pred_debug_counter == 0:
+                    self.Error("Model is None in Predict() - no trades will be taken")
+                    self.Error("Please ensure:")
+                    self.Error("1. Model exists in database (xgboost_models table)")
+                    self.Error("2. API is serving the correct model")
+                    self.Error("3. API endpoint is accessible")
+                return None
 
             proba = self.model.predict_proba(feature_array)[0, 1]
             return float(proba)
         except Exception as e:
             self.Error(f"Predict error: {e}")
-            # Return neutral prediction on error
-            return 0.5
+            return None
 
     # =========================================================
     # TRADING
@@ -1087,13 +1184,26 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
             self.entry_time = self.Time
             self.Debug(f"BUY SetHoldings({self.position_size_pct:.0%}) pred={pred:.3f} est_entry={self.entry_price:.2f}")
 
-        # EXIT by prediction
+        # EXIT by prediction (with minimum holding period check)
         elif pred < self.prediction_sell_threshold and qty > 0 and not self.pending_exit:
-            self.pending_exit = True
-            self.last_exit_reason = "PRED"
-            self.Liquidate(self.symbol)
-            # Do NOT clear entry_price here; need it for exit signal on fill
-            self.Debug(f"EXIT (PRED) pred={pred:.3f}")
+            # Check minimum holding period before allowing prediction-based exit
+            hold_ok = True
+            try:
+                if self.entry_time is not None:
+                    min_hold = timedelta(hours=getattr(self, 'min_hold_bars', 0))
+                    # Only allow exit if minimum holding period has passed
+                    if self.Time < (self.entry_time + min_hold):
+                        hold_ok = False
+                        self.Debug(f"Min hold not met (held {self.Time - self.entry_time}, need {min_hold})")
+            except Exception:
+                hold_ok = True
+
+            if hold_ok:
+                self.pending_exit = True
+                self.last_exit_reason = "PRED"
+                self.Liquidate(self.symbol)
+                # Do NOT clear entry_price here; need it for exit signal on fill
+                self.Debug(f"EXIT (PRED) pred={pred:.3f}")
 
     # =========================================================
     # SL/TP
@@ -1160,9 +1270,17 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
 
     def OnEndOfAlgorithm(self):
         self.Debug(f"Final Portfolio Value: {self.Portfolio.TotalPortfolioValue:.2f}")
-        self.Debug("=== IMPORTANT NOTES ===")
-        self.Debug("1. This algorithm uses 17 price features only")
-        self.Debug("2. Training model may use 105 features (futures data)")
-        self.Debug("3. For best results, train price-only model or use external API signals")
-        self.Debug("4. Contact: Set model_features to match training feature list")
-        self.Debug("=======================")
+        self.Debug("=" * 60)
+        self.Debug("TRADING PARAMETERS (OPTIMIZED for High Win Rate)")
+        self.Debug("=" * 60)
+        self.Debug(f"Buy Threshold: {self.prediction_buy_threshold:.2f} (enter when prob >= 65%)")
+        self.Debug(f"Sell Threshold: {self.prediction_sell_threshold:.2f} (exit when prob <= 35%)")
+        self.Debug(f"Stop Loss: {self.stop_loss_pct:.1%}")
+        self.Debug(f"Take Profit: {self.take_profit_pct:.1%}")
+        self.Debug(f"Min Hold Bars: {getattr(self, 'min_hold_bars', 0)} hours")
+        self.Debug(f"Position Size: {self.position_size_pct:.1%}")
+        self.Debug("=" * 60)
+        self.Debug("FEATURE INFO")
+        self.Debug(f"Features: 17 price features (price-only model)")
+        self.Debug(f"Model Endpoint: {self.api_base_url}/api/v1/futures/latest/model")
+        self.Debug("=" * 60)
