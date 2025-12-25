@@ -174,15 +174,22 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.window_size = 60
         self.price_window = deque(maxlen=self.window_size)
 
-        # ===== Trading parameters (OPTIMIZED for more trade frequency) =====
-        # Prediction thresholds - more aggressive entry
-        self.prediction_buy_threshold = 0.40   # Buy when prob >= 40% (lowered for more trades)
-        self.prediction_sell_threshold = 0.30   # Exit when prob <= 30%
-        self.position_size_pct = 0.50           # 50% capital per trade (safer with more trades)
+        # ===== Trading parameters (MATCHED with training) =====
+        # Training: trend_window=8 bars, threshold=0.3%
+        # Model predicts: "Will price move >= 0.3% in 8 hours?"
 
-        # Stop Loss & Take Profit - more conservative for higher WR
-        self.stop_loss_pct = 0.05               # 5% stop loss (cut losses early)
-        self.take_profit_pct = 0.10             # 10% take profit (realistic target - was 70% too high!)
+        # Prediction thresholds - model confidence for entry/exit
+        self.prediction_buy_threshold = 0.40   # Buy when prob >= 40%
+        self.prediction_sell_threshold = 0.30   # Exit when prob <= 30%
+        self.position_size_pct = 0.50           # 50% capital per trade
+
+        # Stop Loss & Take Profit - MATCHED with training threshold (0.3%)
+        # TP slightly above training threshold, SL slightly below
+        self.stop_loss_pct = 0.002              # 0.2% stop loss (below 0.3% threshold)
+        self.take_profit_pct = 0.005            # 0.5% take profit (above 0.3% threshold)
+
+        # Trading horizon - MATCHED with training trend_window (8 bars = 8 hours)
+        self.max_hold_bars = 8                  # Max hold 8 hours (sama dengan trend_window)
 
         # Minimum holding period - prevent whipsaw exits
         self.min_hold_bars = 1                  # Hold minimum 1 hour before prediction-based exit
@@ -1031,6 +1038,11 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
             self.last_trade_bar_time = self.Time
             return
 
+        # Max hold period check - exit after trend_window (8 bars = 8 hours)
+        if self.CheckMaxHoldPeriod(close):
+            self.last_trade_bar_time = self.Time
+            return
+
         # Decision based on prediction
         self.TradeLogic(pred)
         self.last_trade_bar_time = self.Time
@@ -1239,6 +1251,43 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
             return False
         except Exception as e:
             self.Error(f"CheckStopLossTakeProfit error: {e}")
+            return False
+
+    # =========================================================
+    # MAX HOLD PERIOD (Matched with training trend_window)
+    # =========================================================
+    def CheckMaxHoldPeriod(self, price: float) -> bool:
+        """
+        Exit position after max_hold_bars (trend_window from training).
+        Training: trend_window=8 bars (8 hours for 1h interval)
+        Model prediction only valid for this horizon.
+        """
+        try:
+            if self.pending_exit:
+                return True
+
+            qty = self.Portfolio[self.symbol].Quantity
+            if qty <= 0 or self.entry_time is None:
+                return False
+
+            # Get max_hold_bars from settings (default 8)
+            max_hold_hours = getattr(self, 'max_hold_bars', 8)
+
+            # Check if we've exceeded max hold period
+            hold_duration = self.Time - self.entry_time
+            if hold_duration >= timedelta(hours=max_hold_hours):
+                self.pending_exit = True
+                self.last_exit_reason = "TIME"
+                self.Liquidate(self.symbol)
+
+                # Calculate PnL at exit
+                pnl_pct = (price - self.entry_price) / self.entry_price if self.entry_price != 0 else 0.0
+                self.Debug(f"MAX HOLD EXIT ({max_hold_hours}h) held={hold_duration} pnl={pnl_pct:.2%}")
+                return True
+
+            return False
+        except Exception as e:
+            self.Error(f"CheckMaxHoldPeriod error: {e}")
             return False
 
     # =========================================================
