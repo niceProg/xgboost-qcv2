@@ -576,6 +576,40 @@ async def insert_futures_model(model_request: ModelInsertRequest):
     return insert_model_by_version(model_request, 'futures')
 
 # =========================================================
+# FUTURES17 ENDPOINTS (/api/v1/futures17/*)
+# =========================================================
+
+@app.get("/api/v1/futures17/latest/model", response_model=ModelResponse)
+async def get_futures17_latest_model():
+    """Get latest futures17 trained model with base64 encoding."""
+    return get_latest_model_by_version('futures17')
+
+@app.get("/api/v1/futures17/latest/dataset-summary", response_model=DatasetSummaryResponse)
+async def get_futures17_latest_dataset_summary():
+    """Get latest futures17 dataset summary with base64 encoding."""
+    return get_dataset_summary_by_version('futures17')
+
+@app.get("/api/v1/futures17/summary/{summary_id}", response_model=DatasetSummaryResponse)
+async def get_futures17_summary_by_id(summary_id: int):
+    """Get futures17 dataset summary by specific ID."""
+    return get_summary_by_id_version(summary_id, 'futures17')
+
+@app.get("/api/v1/futures17/model/{model_id}", response_model=ModelResponse)
+async def get_futures17_model_by_id(model_id: int):
+    """Get futures17 model by specific ID."""
+    return get_model_by_id_version(model_id, 'futures17')
+
+@app.get("/api/v1/futures17/models", response_model=ModelsResponse)
+async def list_futures17_models():
+    """List all available futures17 models."""
+    return list_models_by_version('futures17')
+
+@app.post("/api/v1/futures17/model", response_model=ModelInsertResponse)
+async def insert_futures17_model(model_request: ModelInsertRequest):
+    """Insert a new futures17 trained model to the database."""
+    return insert_model_by_version(model_request, 'futures17')
+
+# =========================================================
 # DATABASE MODEL REFERENCES
 # =========================================================
 
@@ -618,6 +652,14 @@ if __name__ == "__main__":
     logger.info("   GET /api/v1/futures/summary/{summary_id} - Get futures dataset summary by ID")
     logger.info("   GET /api/v1/futures/models - List all futures models")
     logger.info("   POST /api/v1/futures/model - Insert new futures model")
+    logger.info("")
+    logger.info("   FUTURES17 Endpoints:")
+    logger.info("   GET /api/v1/futures17/latest/model - Get latest futures17 model")
+    logger.info("   GET /api/v1/futures17/latest/dataset-summary - Get latest futures17 dataset summary")
+    logger.info("   GET /api/v1/futures17/model/{model_id} - Get futures17 model by ID")
+    logger.info("   GET /api/v1/futures17/summary/{summary_id} - Get futures17 dataset summary by ID")
+    logger.info("   GET /api/v1/futures17/models - List all futures17 models")
+    logger.info("   POST /api/v1/futures17/model - Insert new futures17 model")
     logger.info("")
     logger.info("📖 API docs available at: http://localhost:5000/docs")
 

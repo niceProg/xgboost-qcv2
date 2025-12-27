@@ -37,8 +37,8 @@ class XGBoostTradingAlgorithm(QCAlgorithm):
         self.api_timeout = 30  # seconds
         self.api_retry_count = 3
 
-        # Model version: 'spot' or 'futures'
-        self.model_version = "spot"  # Change to "futures" for futures trading
+        # Model version: 'spot', 'futures', or 'futures17'
+        self.model_version = "spot"  # Change to "futures" or "futures17" for futures trading
 
         # Skip API calls in backtest mode to prevent network errors
         self.use_api = self.LiveMode  # Only use API in live/paper trading
