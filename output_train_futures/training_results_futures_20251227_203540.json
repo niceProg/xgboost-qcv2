@@ -1,0 +1,44 @@
+{
+  "model_name": "xgboost_futures_model_20251227_203540.joblib",
+  "model_type": "futures",
+  "timestamp": "20251227_203540",
+  "parameters": {
+    "objective": "binary:logistic",
+    "eval_metric": [
+      "logloss",
+      "auc"
+    ],
+    "learning_rate": 0.01,
+    "max_depth": 4,
+    "min_child_weight": 5,
+    "subsample": 0.6,
+    "colsample_bytree": 0.6,
+    "colsample_bylevel": 0.8,
+    "alpha": 0,
+    "lambda": 1,
+    "random_state": 42,
+    "n_estimators": 100,
+    "early_stopping_rounds": 10,
+    "verbosity": 1
+  },
+  "metrics": {
+    "accuracy": 0.524963924963925,
+    "precision": 0.5210405508798776,
+    "recall": 0.775626423690205,
+    "f1": 0.6233409610983982,
+    "roc_auc": 0.5298250185604552
+  },
+  "cross_validation": {
+    "mean_auc": 0.5250577358767898,
+    "std_auc": 0.005319545353287343,
+    "cv_scores": [
+      0.5253412119973009,
+      0.5255047229188888,
+      0.5234190081835511,
+      0.5172019416376064,
+      0.5338217946466022
+    ]
+  },
+  "feature_count": 103,
+  "sample_count": 103
+}

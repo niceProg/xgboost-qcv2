@@ -1,0 +1,12 @@
+# XGBoost Requirements for 17 Price Features Training
+
+pandas>=2.0.0
+numpy>=1.24.0
+xgboost>=2.0.0
+scikit-learn>=1.3.0
+joblib>=1.3.0
+
+# Database & Environment
+python-dotenv>=1.0.0
+sqlalchemy>=2.0.0
+pymysql>=1.1.0

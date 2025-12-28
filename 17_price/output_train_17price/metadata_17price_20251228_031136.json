@@ -1,0 +1,48 @@
+{
+  "model_type": "XGBoostClassifier",
+  "model_type_code": "17price",
+  "model_version": "17price_20251228_031136",
+  "features": [
+    "price_open",
+    "price_high",
+    "price_low",
+    "price_close",
+    "price_volume_usd",
+    "price_close_return_1",
+    "price_close_return_5",
+    "price_log_return",
+    "price_rolling_vol_5",
+    "price_true_range",
+    "price_close_mean_5",
+    "price_close_std_5",
+    "price_volume_mean_10",
+    "price_volume_zscore",
+    "price_volume_change",
+    "price_wick_upper",
+    "price_wick_lower",
+    "price_body_size"
+  ],
+  "n_features": 18,
+  "feature_hash": "2494810550408332575",
+  "trained_at": "2025-12-28T03:11:36.616342",
+  "train_start": "2022-01-01 00:00:00",
+  "train_end": "2025-12-22 18:00:00",
+  "test_start": "2022-01-01 00:00:00",
+  "test_end": "2025-12-22 13:00:00",
+  "train_samples": 55144,
+  "test_samples": 13786,
+  "metrics": {
+    "accuracy": 0.5299579283330915,
+    "precision": 0.536877962085308,
+    "recall": 0.5194898251648037,
+    "f1": 0.528040786598689,
+    "roc_auc": 0.5443672917468667
+  },
+  "config": {
+    "n_estimators": 200,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "forward_bars": 1,
+    "label_type": "next_bar"
+  }
+}

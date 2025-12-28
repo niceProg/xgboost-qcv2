@@ -1,0 +1,40 @@
+# ========================================
+# QUANTCONNECT OBJECTSTORE UPLOAD
+# ========================================
+
+## Method 1: Using QuantConnect CLI (Recommended)
+
+1. Install QuantConnect CLI:
+   pip install quantconnect-cli
+
+2. Login to QuantConnect:
+   qc login
+
+3. Upload the model file:
+   qc object store save --key xgboost_futures_model --path ./output_train_futures/xgboost_futures_model_download.joblib
+
+## Method 2: Using QuantConnect Notebooks
+
+1. Open QuantConnect and create a new Notebook
+2. Copy the base64 content from model_base64.txt
+3. Run the following code:
+
+from AlgorithmImports import *
+import base64
+
+# Paste your base64 model content here
+model_b64 = PASTE_BASE64_HERE
+
+# Decode and save to ObjectStore
+model_data = base64.b64decode(model_b64)
+ObjectStore.SetBytes('xgboost_futures_model', model_data)
+
+print('Model uploaded successfully!')
+print(f'Model size: {len(model_data)} bytes')
+
+## Method 3: Using REST API
+
+You can also upload via QuantConnect REST API:
+POST https://www.quantconnect.com/api/v2/objectStore/save
+Headers: Authorization: Bearer YOUR_API_TOKEN
+Body: {'key': 'xgboost_futures_model', 'data': 'BASE64_ENCODED_MODEL'}

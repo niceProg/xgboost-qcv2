@@ -1,0 +1,65 @@
+============================================
+XGBoost Futures Trading Model - Summary
+============================================
+
+Model Information:
+- Model Name: xgboost_futures_model_20251227_121955.joblib
+- Model Type: Futures Trading
+- Timestamp: 2025-12-27 12:19:55 WIB
+- Training Date: 20251227_121955
+
+Training Parameters:
+{
+  "objective": "binary:logistic",
+  "eval_metric": [
+    "logloss",
+    "auc"
+  ],
+  "learning_rate": 0.1,
+  "max_depth": 8,
+  "min_child_weight": 5,
+  "subsample": 0.6,
+  "colsample_bytree": 0.6,
+  "colsample_bylevel": 0.8,
+  "alpha": 0,
+  "lambda": 1,
+  "random_state": 42,
+  "n_estimators": 100,
+  "early_stopping_rounds": 10,
+  "verbosity": 1
+}
+
+Test Set Performance:
+- Accuracy: 0.5319
+- Precision: 0.5352
+- Recall: 0.5667
+- F1 Score: 0.5505
+- ROC AUC: 0.5424
+
+Cross Validation:
+- Mean AUC: 0.5335 +/- 0.0142
+- All Scores: ['0.5327', '0.5553', '0.5403', '0.5264', '0.5128']
+
+Feature Information:
+- Total Features: 103
+- Top 10 Features:
+  34. price_close_return_5: 0.0151
+  35. price_log_return: 0.0148
+  16. oi_low: 0.0144
+  14. oi_open: 0.0142
+  17. oi_close: 0.0136
+  29. ls_global_global_account_long_short_ratio: 0.0126
+  93. ls_top_ratio: 0.0125
+  60. oi_zscore: 0.0120
+  15. oi_high: 0.0119
+  58. oi_change_abs: 0.0117
+
+Model Files:
+- Model: xgboost_futures_model_20251227_121955.joblib
+- Latest: latest_futures_model.joblib
+- Features: model_features_futures.txt
+- Results: training_results_futures_20251227_121955.json
+
+============================================
+Ready for QuantConnect Backtest
+============================================

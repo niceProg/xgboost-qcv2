@@ -1,0 +1,127 @@
+Futures Dataset Summary
+==============================
+
+Training Session Info:
+- Timestamp: 2025-12-27 08:21:44 WIB
+- Model Type: Futures Trading (XGBoost)
+
+Dataset Statistics:
+- Total samples: 17,322
+- Features: 103
+- Label distribution:
+  * Bullish (1): 8,777 (50.7%)
+  * Bearish (0): 8,545 (49.3%)
+
+Time Range:
+- Start: 2024-01-01 00:00:00 (2024-01-01 07:00:00 WIB)
+- End: 2025-12-22 17:00:00 (2025-12-23 00:00:00 WIB)
+
+Data Sources:
+- Exchanges: ['Binance']
+- Symbols: ['BTCUSDT']
+- Intervals: ['1h']
+
+Feature Columns:
+- basis_close_basis
+- basis_close_change
+- basis_delta
+- basis_drift
+- basis_mean_24
+- basis_open_basis
+- basis_open_change
+- basis_volatility_24
+- basis_zscore
+- cross_funding_oi
+- cross_funding_price
+- cross_liq_funding
+- cross_liq_price
+- cross_ls_price
+- cross_ob_price
+- cross_oi_taker
+- funding_close
+- funding_extreme_negative
+- funding_extreme_positive
+- funding_high
+- funding_low
+- funding_mean_24
+- funding_norm
+- funding_open
+- funding_std_24
+- funding_zscore
+- liq_aggregated_long_liquidation_usd
+- liq_aggregated_short_liquidation_usd
+- liq_imbalance
+- liq_long_mean_12
+- liq_long_zscore
+- liq_ratio
+- liq_short_mean_12
+- liq_short_zscore
+- liq_spike
+- liq_total
+- liq_total_mean_12
+- ls_global_delta
+- ls_global_extreme_high
+- ls_global_extreme_low
+- ls_global_global_account_long_percent
+- ls_global_global_account_long_short_ratio
+- ls_global_global_account_short_percent
+- ls_global_ratio
+- ls_global_zscore
+- ls_top_delta
+- ls_top_ratio
+- ls_top_top_account_long_percent
+- ls_top_top_account_long_short_ratio
+- ls_top_top_account_short_percent
+- ls_top_vs_global
+- ls_top_zscore
+- ob_aggregated_asks_quantity
+- ob_aggregated_asks_usd
+- ob_aggregated_bids_quantity
+- ob_aggregated_bids_usd
+- ob_asks_mean_12
+- ob_bid_ask_ratio
+- ob_bids_mean_12
+- ob_depth_change
+- ob_imbalance_usd
+- ob_pressure
+- ob_pressure_asks
+- ob_qty_bid_ask_ratio
+- oi_change
+- oi_change_abs
+- oi_close
+- oi_high
+- oi_low
+- oi_momentum_5
+- oi_open
+- oi_price_ratio
+- oi_zscore
+- price_body_size
+- price_close
+- price_close_mean_5
+- price_close_return_1
+- price_close_return_5
+- price_close_std_5
+- price_high
+- price_log_return
+- price_low
+- price_open
+- price_rolling_vol_5
+- price_true_range
+- price_volume_change
+- price_volume_mean_10
+- price_volume_usd
+- price_volume_zscore
+- price_wick_lower
+- price_wick_upper
+- range_percent
+- taker_aggregated_buy_volume
+- taker_aggregated_sell_volume
+- taker_buy_mean_12
+- taker_buy_momentum
+- taker_buy_ratio
+- taker_buy_std_12
+- taker_buy_zscore
+- taker_imbalance
+- taker_sell_mean_12
+- taker_sell_std_12
+- taker_sell_zscore
