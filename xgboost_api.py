@@ -610,6 +610,40 @@ async def insert_futures17_model(model_request: ModelInsertRequest):
     return insert_model_by_version(model_request, 'futures17')
 
 # =========================================================
+# FUTURES NEW GEN ENDPOINTS (/api/v1/futures_new_gen/*)
+# =========================================================
+
+@app.get("/api/v1/futures_new_gen/latest/model", response_model=ModelResponse)
+async def get_futures_new_gen_latest_model():
+    """Get latest futures_new_gen trained model with base64 encoding."""
+    return get_latest_model_by_version('futures_new_gen')
+
+@app.get("/api/v1/futures_new_gen/latest/dataset-summary", response_model=DatasetSummaryResponse)
+async def get_futures_new_gen_latest_dataset_summary():
+    """Get latest futures_new_gen dataset summary with base64 encoding."""
+    return get_dataset_summary_by_version('futures_new_gen')
+
+@app.get("/api/v1/futures_new_gen/summary/{summary_id}", response_model=DatasetSummaryResponse)
+async def get_futures_new_gen_summary_by_id(summary_id: int):
+    """Get futures_new_gen dataset summary by specific ID."""
+    return get_summary_by_id_version(summary_id, 'futures_new_gen')
+
+@app.get("/api/v1/futures_new_gen/model/{model_id}", response_model=ModelResponse)
+async def get_futures_new_gen_model_by_id(model_id: int):
+    """Get futures_new_gen model by specific ID."""
+    return get_model_by_id_version(model_id, 'futures_new_gen')
+
+@app.get("/api/v1/futures_new_gen/models", response_model=ModelsResponse)
+async def list_futures_new_gen_models():
+    """List all available futures_new_gen models."""
+    return list_models_by_version('futures_new_gen')
+
+@app.post("/api/v1/futures_new_gen/model", response_model=ModelInsertResponse)
+async def insert_futures_new_gen_model(model_request: ModelInsertRequest):
+    """Insert a new futures_new_gen trained model to the database."""
+    return insert_model_by_version(model_request, 'futures_new_gen')
+
+# =========================================================
 # DATABASE MODEL REFERENCES
 # =========================================================
 
@@ -660,6 +694,14 @@ if __name__ == "__main__":
     logger.info("   GET /api/v1/futures17/summary/{summary_id} - Get futures17 dataset summary by ID")
     logger.info("   GET /api/v1/futures17/models - List all futures17 models")
     logger.info("   POST /api/v1/futures17/model - Insert new futures17 model")
+    logger.info("")
+    logger.info("   FUTURES NEW GEN Endpoints:")
+    logger.info("   GET /api/v1/futures_new_gen/latest/model - Get latest futures_new_gen model")
+    logger.info("   GET /api/v1/futures_new_gen/latest/dataset-summary - Get latest futures_new_gen dataset summary")
+    logger.info("   GET /api/v1/futures_new_gen/model/{model_id} - Get futures_new_gen model by ID")
+    logger.info("   GET /api/v1/futures_new_gen/summary/{summary_id} - Get futures_new_gen dataset summary by ID")
+    logger.info("   GET /api/v1/futures_new_gen/models - List all futures_new_gen models")
+    logger.info("   POST /api/v1/futures_new_gen/model - Insert new futures_new_gen model")
     logger.info("")
     logger.info("📖 API docs available at: http://localhost:5000/docs")
 
