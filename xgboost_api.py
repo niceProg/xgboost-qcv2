@@ -644,6 +644,40 @@ async def insert_futures_new_gen_model(model_request: ModelInsertRequest):
     return insert_model_by_version(model_request, 'futures_new_gen')
 
 # =========================================================
+# FUTURES NEW GEN ETH ENDPOINTS (/api/v1/futures_new_gen_eth/*)
+# =========================================================
+
+@app.get("/api/v1/futures_new_gen_eth/latest/model", response_model=ModelResponse)
+async def get_futures_new_gen_eth_latest_model():
+    """Get latest futures_new_gen_eth trained model with base64 encoding."""
+    return get_latest_model_by_version('futures_new_gen_eth')
+
+@app.get("/api/v1/futures_new_gen_eth/latest/dataset-summary", response_model=DatasetSummaryResponse)
+async def get_futures_new_gen_eth_latest_dataset_summary():
+    """Get latest futures_new_gen_eth dataset summary with base64 encoding."""
+    return get_dataset_summary_by_version('futures_new_gen_eth')
+
+@app.get("/api/v1/futures_new_gen_eth/summary/{summary_id}", response_model=DatasetSummaryResponse)
+async def get_futures_new_gen_eth_summary_by_id(summary_id: int):
+    """Get futures_new_gen_eth dataset summary by specific ID."""
+    return get_summary_by_id_version(summary_id, 'futures_new_gen_eth')
+
+@app.get("/api/v1/futures_new_gen_eth/model/{model_id}", response_model=ModelResponse)
+async def get_futures_new_gen_eth_model_by_id(model_id: int):
+    """Get futures_new_gen_eth model by specific ID."""
+    return get_model_by_id_version(model_id, 'futures_new_gen_eth')
+
+@app.get("/api/v1/futures_new_gen_eth/models", response_model=ModelsResponse)
+async def list_futures_new_gen_eth_models():
+    """List all available futures_new_gen_eth models."""
+    return list_models_by_version('futures_new_gen_eth')
+
+@app.post("/api/v1/futures_new_gen_eth/model", response_model=ModelInsertResponse)
+async def insert_futures_new_gen_eth_model(model_request: ModelInsertRequest):
+    """Insert a new futures_new_gen_eth trained model to the database."""
+    return insert_model_by_version(model_request, 'futures_new_gen_eth')
+
+# =========================================================
 # DATABASE MODEL REFERENCES
 # =========================================================
 
@@ -702,6 +736,14 @@ if __name__ == "__main__":
     logger.info("   GET /api/v1/futures_new_gen/summary/{summary_id} - Get futures_new_gen dataset summary by ID")
     logger.info("   GET /api/v1/futures_new_gen/models - List all futures_new_gen models")
     logger.info("   POST /api/v1/futures_new_gen/model - Insert new futures_new_gen model")
+    logger.info("")
+    logger.info("   FUTURES NEW GEN ETH Endpoints:")
+    logger.info("   GET /api/v1/futures_new_gen_eth/latest/model - Get latest futures_new_gen_eth model")
+    logger.info("   GET /api/v1/futures_new_gen_eth/latest/dataset-summary - Get latest futures_new_gen_eth dataset summary")
+    logger.info("   GET /api/v1/futures_new_gen_eth/model/{model_id} - Get futures_new_gen_eth model by ID")
+    logger.info("   GET /api/v1/futures_new_gen_eth/summary/{summary_id} - Get futures_new_gen_eth dataset summary by ID")
+    logger.info("   GET /api/v1/futures_new_gen_eth/models - List all futures_new_gen_eth models")
+    logger.info("   POST /api/v1/futures_new_gen_eth/model - Insert new futures_new_gen_eth model")
     logger.info("")
     logger.info("📖 API docs available at: http://localhost:5000/docs")
 
